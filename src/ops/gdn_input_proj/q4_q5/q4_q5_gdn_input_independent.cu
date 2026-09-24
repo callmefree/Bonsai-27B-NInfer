@@ -126,8 +126,20 @@ void launch_q5_split4_exact(const Tensor& x, const Weight& weight, Tensor& value
     case 6:
         launch_q5_split4<6>(x, weight, value, z, stream);
         return;
+    case 7:
+        launch_q5_split4<7>(x, weight, value, z, stream);
+        return;
+    case 8:
+        launch_q5_split4<8>(x, weight, value, z, stream);
+        return;
+    case 9:
+        launch_q5_split4<9>(x, weight, value, z, stream);
+        return;
+    case 10:
+        launch_q5_split4<10>(x, weight, value, z, stream);
+        return;
     default:
-        throw std::invalid_argument("GDN Q5 split4 requires T in [2,6]");
+        throw std::invalid_argument("GDN Q5 split4 requires T in [2,10]");
     }
 }
 
@@ -157,7 +169,10 @@ void launch_q5(const Tensor& x, const Weight& weight, Tensor& value, Tensor& z,
         launch_q5_gemv(x, weight, value, z, stream);
         return;
     }
-    if (x.ne[1] <= 6) {
+    if (x.ne[1] <= 10) {
+        // Split4: one CTA owns one output row, its four warps split the K dimension and reduce
+        // their partial sums through shared memory. The column count is a compile-time template
+        // argument, so the kernel covers exactly the live columns.
         launch_q5_split4_exact(x, weight, value, z, stream);
         return;
     }
