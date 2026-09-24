@@ -1,3 +1,6 @@
+// MODIFIED for the NInfer ternary port (Ternary Bonsai 2 27B on NInfer / Ada sm_89).
+// This file differs from upstream NInfer; see patches/ in the release bundle
+// for the change list, rebuild steps and required verification.
 #include "artifact/reader.h"
 
 #include <nlohmann/json.hpp>
@@ -100,6 +103,8 @@ NumericFormat parse_format(std::string_view name) {
     if (name == "W8G32_F16S") { return NumericFormat::W8G32_F16S; }
     if (name == "NVFP4") { return NumericFormat::NVFP4; }
     if (name == "FP8_E4M3FN_ROW_BF16S") { return NumericFormat::FP8_E4M3FN_ROW_BF16S; }
+    if (name == "PTQ1_0_G128") { return NumericFormat::PTQ1_0_G128; }
+    if (name == "PQ2_0_G128") { return NumericFormat::PQ2_0_G128; }
     throw ArtifactError("unknown tensor format: " + std::string(name));
 }
 

@@ -1,3 +1,6 @@
+// MODIFIED for the NInfer ternary port (Ternary Bonsai 2 27B on NInfer / Ada sm_89).
+// This file differs from upstream NInfer; see patches/ in the release bundle
+// for the change list, rebuild steps and required verification.
 #pragma once
 
 #include "artifact/reader.h"
@@ -46,6 +49,12 @@ public:
     ObjectHandle require_resource(std::string_view name, ResourceEncoding encoding);
 
     [[nodiscard]] bool contains(std::string_view name) const noexcept;
+    // Peek an object's descriptor WITHOUT consuming it. bind_tensor()/require_tensor() consume
+    // and demand an expected format, so this is the only way to learn what an artifact really
+    // declares before binding it -- which grouped row-split weights need, because the family
+    // members are container-compatible and the artifact may store a different member than the
+    // caller's plan names.
+    [[nodiscard]] const ObjectDescriptor* find(std::string_view name) const noexcept;
     const ObjectDescriptor& descriptor(ObjectHandle handle) const;
     PayloadSpan payload(ObjectHandle handle) const;
     void materialize_on_device(ObjectHandle handle);

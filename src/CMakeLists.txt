@@ -1,4 +1,7 @@
-﻿function(ninfer_internal_includes target)
+# MODIFIED for the NInfer ternary port (Ternary Bonsai 2 27B on NInfer / Ada sm_89).
+# This file differs from upstream NInfer; see patches/ in the release bundle
+# for the change list, rebuild steps and required verification.
+function(ninfer_internal_includes target)
   target_include_directories(${target} PRIVATE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
@@ -280,6 +283,10 @@ add_library(ninfer_ops STATIC
   ops/linear/q6/q6_dispatch.cpp
   ops/linear/q6/q6_rowsplit_gemm_mma.cu
   ops/linear/q6/q6_rowsplit_gemm_simt.cu
+  ops/linear/ternary/ternary_rowsplit_gemm.cu
+  ops/linear/ternary/ternary_dispatch.cpp
+  ops/linear/ternary/ternary_rotation.cu
+  ops/linear/ternary/ternary_rotation.cpp
   ops/linear/w8/w8_feature.cu
   ops/linear/w8/w8_rowsplit_gemm_mma.cu
   ops/linear/w8/w8_rowsplit_gemm_simt.cu
@@ -355,13 +362,15 @@ ninfer_internal_includes(ninfer_text)
 add_library(ninfer_media_decode STATIC
   media/decode/decode.cpp)
 ninfer_internal_includes(ninfer_media_decode)
-if(NINFER_BUILD_MEDIA_ACQUIRE)
+if(NINFER_BUILD_MEDIA_ACQUIRE AND TARGET PkgConfig::FFMPEG)
   target_link_libraries(ninfer_media_decode PRIVATE PkgConfig::FFMPEG)
   target_compile_definitions(ninfer_media_decode PRIVATE NINFER_HAVE_FFMPEG)
 endif()
 
-if(NINFER_BUILD_MEDIA_ACQUIRE)
+if(NINFER_BUILD_MEDIA_ACQUIRE OR NINFER_BUILD_PROMPT_INPUT)
   # Product-only path/data/HTTP acquisition. No target package links this library.
+  # fork: 该库本身无外部依赖（curl 链接本就注释掉），但 prompt_input/apps 无条件链接它，
+  # 因此关掉 media 时也必须构建，否则 LNK1181 找不到 ninfer_media_acquire.lib。
   add_library(ninfer_media_acquire STATIC
     product/media_acquire/acquire.cpp)
   ninfer_internal_includes(ninfer_media_acquire)

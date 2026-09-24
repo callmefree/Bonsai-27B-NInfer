@@ -1,3 +1,6 @@
+// MODIFIED for the NInfer ternary port (Ternary Bonsai 2 27B on NInfer / Ada sm_89).
+// This file differs from upstream NInfer; see patches/ in the release bundle
+// for the change list, rebuild steps and required verification.
 #pragma once
 
 // ninfer::ops::detail - private launch prototypes for embedding variants.
@@ -22,6 +25,11 @@ void embed_gather_w8_launch(const Tensor& ids, const Weight& table, Tensor& out,
                             cudaStream_t stream);
 void embed_gather_fp8_launch(const Tensor& ids, const Weight& table, Tensor& out,
                              cudaStream_t stream);
+// Prism ternary tables (group 128). PQ2_0 has no high plane; PTQ1_0 carries qh in it.
+void embed_gather_pq2_launch(const Tensor& ids, const Weight& table, Tensor& out,
+                             cudaStream_t stream);
+void embed_gather_ptq1_launch(const Tensor& ids, const Weight& table, Tensor& out,
+                              cudaStream_t stream);
 void embed_gather_w8_2048_launch(const Tensor& ids, const Weight& table, Tensor& out,
                                  W8EmbedRoute route, cudaStream_t stream);
 const char* w8_embed_route_name(W8EmbedRoute route);

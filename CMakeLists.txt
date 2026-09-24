@@ -32,7 +32,10 @@ endif()
 
 # sm_89 (RTX 4090) builds enable the capped-shared-memory w8 kernel variants (see
 # src/ops/linear/w8/w8_config.h); the 120a build keeps its default high-memory schedules.
-if(CMAKE_CUDA_ARCHITECTURES MATCHES "89")
+# fork-build note: the 4090-windows tree's kernel paths are gated on NINFER_SM89
+# (device.h kTargetSmCount=128), and 128 SMs equals the RTX 5080, so the 120a build
+# reuses the same code path while emitting native sm_120a SASS.
+if(CMAKE_CUDA_ARCHITECTURES MATCHES "89|120a")
   add_compile_definitions(NINFER_SM89=1)
 endif()
 
@@ -79,10 +82,12 @@ endif()
 
 find_package(CUDAToolkit REQUIRED)
 if(MSVC)
-  add_library(PkgConfig::FFMPEG INTERFACE IMPORTED)
-  target_include_directories(PkgConfig::FFMPEG INTERFACE "${PROJECT_SOURCE_DIR}/ffmpeg/include")
-  target_link_directories(PkgConfig::FFMPEG INTERFACE "${PROJECT_SOURCE_DIR}/ffmpeg/lib")
-  target_link_libraries(PkgConfig::FFMPEG INTERFACE avcodec avformat avutil swscale swresample)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/ffmpeg/include")
+    add_library(PkgConfig::FFMPEG INTERFACE IMPORTED)
+    target_include_directories(PkgConfig::FFMPEG INTERFACE "${PROJECT_SOURCE_DIR}/ffmpeg/include")
+    target_link_directories(PkgConfig::FFMPEG INTERFACE "${PROJECT_SOURCE_DIR}/ffmpeg/lib")
+    target_link_libraries(PkgConfig::FFMPEG INTERFACE avcodec avformat avutil swscale swresample)
+  endif()
 else()
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET

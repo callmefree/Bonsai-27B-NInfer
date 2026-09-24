@@ -1,3 +1,6 @@
+// MODIFIED for the NInfer ternary port (Ternary Bonsai 2 27B on NInfer / Ada sm_89).
+// This file differs from upstream NInfer; see patches/ in the release bundle
+// for the change list, rebuild steps and required verification.
 #pragma once
 
 // ninfer::ops - fused GDN Q/K/V/Z input projections.
@@ -41,6 +44,20 @@ namespace ninfer::ops {
  */
 void gdn_input_proj(const Tensor& x, const Weight& qk_weight, const Weight& value_z_weight,
                     Tensor& qkv, Tensor& z, cudaStream_t stream);
+
+/**
+ * Split-parent GDN projection with an explicit workspace. Same math as the overload above.
+ *
+ * Folded (rotated-basis) ternary parents, PTQ1_0_G128 / PQ2_0_G128 [4096,5120] and
+ * [12288,5120], are admitted here and only here: their activation has to be mapped into the
+ * rotated basis before the matmul, and that scratch comes from the workspace. The rotation is
+ * shared across the three projections, so it is paid once per call rather than once per parent.
+ *
+ * Workspace:
+ *   A [5120, T] BF16 rotation buffer when the parents are folded; zero bytes otherwise.
+ */
+void gdn_input_proj(const Tensor& x, const Weight& qk_weight, const Weight& value_z_weight,
+                    Tensor& qkv, Tensor& z, WorkspaceArena& workspace, cudaStream_t stream);
 
 /**
  * Single-parent GDN projection. Registered parent forms are:

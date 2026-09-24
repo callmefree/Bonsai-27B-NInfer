@@ -1,3 +1,6 @@
+// MODIFIED for the NInfer ternary port (Ternary Bonsai 2 27B on NInfer / Ada sm_89).
+// This file differs from upstream NInfer; see patches/ in the release bundle
+// for the change list, rebuild steps and required verification.
 #pragma once
 
 #include <ninfer/targets/qwen3_6_27b/package.h>
@@ -16,6 +19,7 @@
 #include <optional>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace ninfer::targets::qwen3_6_27b::detail {
 
@@ -28,6 +32,11 @@ struct WeightPlan {
     artifact::NumericFormat format          = artifact::NumericFormat::BF16;
     std::uint32_t weight_scale_divisor_bits = 0;
     std::uint32_t input_scale_divisor_bits  = 0;
+    // Folded-basis feature permutation for this weight; perm_rep == 1 means "none".
+    // Set at bind time from the weight's identity (only /gdn/output carries one).
+    std::int32_t hadamard_perm_hd  = 0;
+    std::int32_t hadamard_perm_nk  = 0;
+    std::int32_t hadamard_perm_rep = 1;
 };
 
 struct MlpPlan {
@@ -137,6 +146,23 @@ struct DFlash2Plan {
     DFlash2CandidateSelectorPlan candidate_selector;
 };
 
+// Sign table of the rotated (folded) weight basis.
+//
+// The ternary port stores linear weights folded into a rotated basis, so the runtime must map an
+// activation as y = H * (s . x) before each folded matmul and as h = s . (H * z) after the
+// token-embedding lookup. `s` lives in one artifact object: `values` holds every sign, and
+// `widths` partitions it, because a weight whose input dimension is W owns exactly W/block_size
+// consecutive sign rows. `width_offsets` is the prefix sum of `widths`, so a weight can find its
+// own block without knowing anything but its input dimension.
+//
+// Absent on artifacts whose weights are not folded (the groupwise-int conversion), which is why
+// the whole thing is optional.
+struct HadamardSignsPlan {
+    artifact::ObjectHandle values;
+    artifact::ObjectHandle widths;
+    std::vector<std::pair<std::int32_t, std::uint64_t>> width_offsets;
+};
+
 struct BindingPlan {
     qwen3_6::FrontendResourcePlan frontend;
     qwen3_6::StartupFeatures features;
@@ -147,6 +173,8 @@ struct BindingPlan {
     WeightPlan output_head;
     artifact::ObjectHandle draft_head;
     artifact::ObjectHandle draft_head_token_ids;
+    // Absent unless the artifact stores folded (rotated-basis) weights; the ternary port does.
+    std::optional<HadamardSignsPlan> hadamard_signs;
     MtpPlan mtp;
     std::optional<DFlash2Plan> dflash2;
 

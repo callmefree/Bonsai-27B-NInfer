@@ -1,3 +1,6 @@
+// MODIFIED for the NInfer ternary port (Ternary Bonsai 2 27B on NInfer / Ada sm_89).
+// This file differs from upstream NInfer; see patches/ in the release bundle
+// for the change list, rebuild steps and required verification.
 #pragma once
 
 #include "core/tensor.h"
@@ -32,6 +35,22 @@ namespace ninfer::ops {
 void attn_input_proj(const Tensor& x, const Weight& query_key_weight,
                      const Weight& gate_value_weight, Tensor& q, Tensor& gate, Tensor& k, Tensor& v,
                      cudaStream_t stream);
+
+/**
+ * Split-parent attention input projection with an explicit workspace. Same math as the overload
+ * above.
+ *
+ * Folded (rotated-basis) ternary parents, PTQ1_0_G128 / PQ2_0_G128 RowSplit `[7168,5120]`, are
+ * admitted here and only here: their activation must be mapped into the rotated basis before the
+ * matmul, and that scratch comes from the workspace. One rotation is shared across the four
+ * projections, so it is paid once per call rather than once per parent.
+ *
+ * Workspace:
+ *   A `[5120, T]` BF16 rotation buffer when the parents are folded; zero bytes otherwise.
+ */
+void attn_input_proj(const Tensor& x, const Weight& query_key_weight,
+                     const Weight& gate_value_weight, Tensor& q, Tensor& gate, Tensor& k, Tensor& v,
+                     WorkspaceArena& workspace, cudaStream_t stream);
 
 /**
  * Computes the single-parent Q/K/output-gate/V projection.

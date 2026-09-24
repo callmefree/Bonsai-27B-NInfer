@@ -1,3 +1,6 @@
+// MODIFIED for the NInfer ternary port (Ternary Bonsai 2 27B on NInfer / Ada sm_89).
+// This file differs from upstream NInfer; see patches/ in the release bundle
+// for the change list, rebuild steps and required verification.
 #include "targets/qwen3_6/impl/runtime/instance.h"
 #include "targets/qwen3_6/impl/runtime/schedule.h"
 
@@ -138,7 +141,10 @@ void sample_from_hidden(PrefillContext& state, const Tensor& hidden, std::int32_
     }
     state.execution.work.reset();
     Tensor logits = state.execution.io.logits.slice(1, 0, 1);
-    ops::linear(hidden, state.execution.model.output_head, logits, state.execution.device.stream);
+    // The workspace overload: the folded (rotated-basis) ternary output head needs a [hidden, 1]
+    // activation rotation buffer, and this arena is the only one in scope here.
+    ops::linear(hidden, state.execution.model.output_head, logits, ops::LinearPolicy::A16Only,
+                state.execution.work, state.execution.device.stream);
     CUDA_CHECK(cudaMemcpyAsync(state.execution.io.pos.data, &absolute_position,
                                sizeof(absolute_position), cudaMemcpyHostToDevice,
                                state.execution.device.stream));
