@@ -1,0 +1,14 @@
+# ===== 体积大头：模型权重 / 制品 / 构建产物 / 备份（不入库，路径与来源见 docs/项目构建史.md）=====
+landing/weights/
+landing/artifacts/
+landing/cuda-13.3/
+landing/build/
+landing/backups/
+
+# ===== 嵌套 git 仓库（上游克隆，独立版本线，不入库）=====
+landing/repos/
+landing/tools/infer-ada-ternary/
+landing/tools/ninfer-ada-ternary/
+
+# ===== 临时文件 =====
+.temp/
