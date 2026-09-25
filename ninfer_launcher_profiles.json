@@ -1,0 +1,65 @@
+{
+  "日常fp8": {
+    "build": "new",
+    "kv": "fp8",
+    "ctx": "32k",
+    "spec": "mtp",
+    "tb": "none"
+  },
+  "英文DFlash2": {
+    "build": "new",
+    "kv": "bf16",
+    "ctx": "32k",
+    "spec": "dflash2",
+    "tb": "none"
+  },
+  "Agent224K": {
+    "build": "new",
+    "kv": "k8v4",
+    "ctx": "224k",
+    "spec": "mtp",
+    "tb": "none"
+  },
+  "Agent256K-MTP": {
+    "build": "new",
+    "kv": "k8v4",
+    "ctx": "256k",
+    "spec": "mtp",
+    "tb": "none"
+  },
+  "Agent256K-TBK": {
+    "build": "new",
+    "kv": "k8v4",
+    "ctx": "256k",
+    "spec": "mtp",
+    "tb": "16000"
+  },
+  "Agent256K-bare": {
+    "build": "new",
+    "kv": "k8v4",
+    "ctx": "256k",
+    "spec": "none",
+    "tb": "none"
+  },
+  "日常fp8-旧版": {
+    "build": "old",
+    "kv": "fp8",
+    "ctx": "32k",
+    "spec": "mtp",
+    "tb": "none"
+  },
+  "Agent256K-MTP-旧版": {
+    "build": "old",
+    "kv": "k8v4",
+    "ctx": "256k",
+    "spec": "mtp",
+    "tb": "none"
+  },
+  "Agent224K-TBK": {
+    "build": "new",
+    "kv": "k8v4",
+    "ctx": "224k",
+    "spec": "mtp",
+    "tb": "16000"
+  }
+}
