@@ -28,9 +28,13 @@ BUILD_OPTIONS = {
     "old": ("旧版(09-22, 根)", os.path.join(BUILD_DIR, "ninfer-serve.exe")),
 }
 KV_OPTIONS = {
-    "fp8":  ("fp8",  ["--kv-dtype", "fp8"]),
-    "bf16": ("bf16", ["--kv-dtype", "bf16"]),
-    "k8v4": ("k8v4", ["--kv-dtype", "k8v4"]),
+    "fp8":      ("fp8",      ["--kv-dtype", "fp8"]),
+    "bf16":     ("bf16",     ["--kv-dtype", "bf16"]),
+    "int8":     ("int8",     ["--kv-dtype", "int8"]),
+    "nvfp4":    ("nvfp4",    ["--kv-dtype", "nvfp4"]),
+    "k8v4":     ("k8v4",     ["--kv-dtype", "k8v4"]),
+    "rk4v4":    ("rk4v4",    ["--kv-dtype", "rk4v4"]),
+    "rk4v4-e8": ("rk4v4-e8", ["--kv-dtype", "rk4v4-e8"]),
 }
 CTX_OPTIONS = {
     "32k":  ("32K",   ["--max-context", "32768"]),
@@ -46,21 +50,164 @@ SPEC_OPTIONS.update({f"d{i}": (f"DFlash2 K={i}",
                                ["--spec", "dflash2", "--draft-tokens", str(i), "--lm-head-draft"])
                      for i in range(1, 16)})
 TB_OPTIONS = {
-    "none":  ("无(不限)", []),
-    "16000": ("16000",   ["--default-thinking-budget", "16000"]),
-    "24000": ("24000",   ["--default-thinking-budget", "24000"]),
+    "none":   ("无(不限)", []),
+    "8000":   ("8000",    ["--default-thinking-budget", "8000"]),
+    "12000":  ("12000",   ["--default-thinking-budget", "12000"]),
+    "16000":  ("16000",   ["--default-thinking-budget", "16000"]),
+    "24000":  ("24000",   ["--default-thinking-budget", "24000"]),
+    "32000":  ("32000",   ["--default-thinking-budget", "32000"]),
+}
+# 思考模式开关：off=关闭思考(加 --no-thinking), on=开启(默认，不加参数)
+THINK_OPTIONS = {
+    "off": ("关闭", ["--no-thinking"]),
+    "on":  ("开启", []),
+}
+# 输出上限：--default-max-tokens（控制思考+输出 token，兼提速）
+MAXOUT_OPTIONS = {
+    "default": ("默认(65535)", []),
+    "1024":    ("1024",     ["--default-max-tokens", "1024"]),
+    "4096":    ("4096",     ["--default-max-tokens", "4096"]),
+    "8192":    ("8192",     ["--default-max-tokens", "8192"]),
+    "16384":   ("16384",    ["--default-max-tokens", "16384"]),
+    "32768":   ("32768",    ["--default-max-tokens", "32768"]),
+}
+# KV 容量预算：--kv-capacity
+KVCAP_OPTIONS = {
+    "default": ("默认", []),
+    "auto":    ("自动(auto)", ["--kv-capacity", "auto"]),
+    "16k":     ("16K",  ["--kv-capacity", "16384"]),
+    "32k":     ("32K",  ["--kv-capacity", "32768"]),
+    "64k":     ("64K",  ["--kv-capacity", "65536"]),
+    "128k":    ("128K", ["--kv-capacity", "131072"]),
+    "224k":    ("224K", ["--kv-capacity", "224000"]),
+    "256k":    ("256K", ["--kv-capacity", "262144"]),
+}
+# 并发度：--max-concurrency（1-8）
+CONC_OPTIONS = {
+    "1": ("1", []),
+    "2": ("2", ["--max-concurrency", "2"]),
+    "4": ("4", ["--max-concurrency", "4"]),
+    "8": ("8", ["--max-concurrency", "8"]),
+}
+# 采样预设：封装 temperature/top-p/top-k/greedy 等
+SAMPLE_OPTIONS = {
+    "default":  ("默认(0.6/0.95)", ["--temperature", "0.6", "--top-p", "0.95"]),
+    "stable":   ("稳健(0.5/0.9)",  ["--temperature", "0.5", "--top-p", "0.9"]),
+    "topk40":   ("TopK40(0.6/0.95)",["--temperature", "0.6", "--top-p", "0.95", "--top-k", "40"]),
+    "creative": ("创意(1.0/0.98)",  ["--temperature", "1.0", "--top-p", "0.98"]),
+    "greedy":   ("贪心(greedy)",    ["--greedy"]),
+}
+# 保留关闭回合推理：--preserve-thinking
+PRESERVE_OPTIONS = {
+    "off": ("关闭", []),
+    "on":  ("开启", ["--preserve-thinking"]),
+}
+# 视觉（多模态）：--vision 加载视觉塔 + media 子系统
+VISION_OPTIONS = {
+    "off": ("关闭", []),
+    "on":  ("开启", ["--vision"]),
+}
+# prefill 内核：WIDE_T（权重驻留，新默认，prefill 翻倍）/ MMA（原 tensor-core）。
+# 通过环境变量 NINFER_TERNARY_PREFILL 控制（引擎进程级），非命令行参数。
+PREFILL_OPTIONS = {
+    "wide": ("WIDE_T(权重驻留·快)", "wide"),
+    "mma":  ("MMA(原tensor-core)", "mma"),
+}
+# S8 int8 prefill rung：作者实测最快的 prefill 内核（int8 量化激活后 mma，T>=33 时比 bf16 wide 快 1.2-1.3x）。
+# 通过环境变量 NINFER_TERNARY_S8 控制（引擎进程级），默认开。与 prefill 正交：S8 优先，其次 wide/mma。
+S8_OPTIONS = {
+    "on":  ("S8(int8·最快)", None),
+    "off": ("关S8(bf16)", "0"),
 }
 
 DIMENSIONS = [
-    ("build", "构建版本", BUILD_OPTIONS),
-    ("kv",    "KV类型",   KV_OPTIONS),
-    ("ctx",   "上下文",   CTX_OPTIONS),
-    ("spec",  "投机解码", SPEC_OPTIONS),
-    ("tb",    "思考预算", TB_OPTIONS),
+    ("think",   "思考模式", THINK_OPTIONS),
+    ("tb",      "思考预算", TB_OPTIONS),
+    ("maxout",  "输出上限", MAXOUT_OPTIONS),
+    ("build",   "构建版本", BUILD_OPTIONS),
+    ("kv",      "KV类型",   KV_OPTIONS),
+    ("kvcap",   "KV容量",   KVCAP_OPTIONS),
+    ("ctx",     "上下文",   CTX_OPTIONS),
+    ("spec",    "投机解码", SPEC_OPTIONS),
+    ("prefill", "prefill内核", PREFILL_OPTIONS),
+    ("s8",      "S8加速",   S8_OPTIONS),
+    ("vision",  "视觉",     VISION_OPTIONS),
+    ("conc",    "并发度",   CONC_OPTIONS),
+    ("sample",  "采样",     SAMPLE_OPTIONS),
+    ("preserve","保留推理", PRESERVE_OPTIONS),
 ]
 
 # 默认选中值
-DEFAULTS = {"build": "new", "kv": "fp8", "ctx": "32k", "spec": "k2", "tb": "none"}
+DEFAULTS = {"think": "on", "tb": "none", "maxout": "default", "build": "new", "kv": "k8v4", "kvcap": "default", "ctx": "128k", "spec": "d7", "prefill": "wide", "s8": "on", "vision": "off", "conc": "1", "sample": "default", "preserve": "off"}
+
+
+# ---------------------------------------------------------------
+# 配置提示（悬停每个选项显示）与场景预设（一键推荐组合）
+# ---------------------------------------------------------------
+DIM_TIPS = {
+    "think":   "思考模式。开=质量好但生成大量思考 token、慢；关=直出快但工具编排可能不稳。短任务可关。",
+    "tb":      "思考预算上限（每回合最多思考 token）。越小越省时；审核/批量建议小；长逻辑建议大。",
+    "maxout":  "单次输出上限（含思考）。限制可防失控浪费；需大于任务实际输出量。",
+    "build":   "构建版本：新版(apps) / 旧版(09-22)。",
+    "kv":      "KV 缓存精度。k8v4 长上下文省显存；fp8/bf16 精度高但更占显存。",
+    "kvcap":   "KV 容量预算。不能小于上下文长度；更小=更省显存更快。",
+    "ctx":     "上下文长度。128K 常用；长对话可更大；短文本/审核建议小（快）。",
+    "spec":    "投机解码：DFlash2/MTP 加速生成，K 越大草稿越多、加速越多但收益递减。",
+    "prefill": "prefill 内核。WIDE_T=权重驻留（新默认，prefill 快 16-40%）；MMA=原 tensor-core。通过环境变量切换。",
+    "s8":     "S8 int8 加速（作者实测最快 prefill 内核）：把激活量化到 int8 后走 tensor-core，T>=33 时比 wide 再快 1.2-1.3x。默认开；关则回到 bf16 档。",
+    "vision":  "视觉（多模态）：开启后支持图片输入（--vision）。模型内置视觉塔，无需另下文件。",
+    "conc":    "并发请求数 1-8。多请求吞吐场景用大值；单会话保持 1。",
+    "sample":  "采样预设。默认 0.6/0.95 平衡；贪心最稳；创意更发散。",
+    "preserve": "保留关闭回合推理到后续 prompt。多轮工具链/长对话有帮助。",
+}
+PRESETS = {
+    "长对话·默认":  {},
+    "快速生成·关思考": {"think": "off"},
+    "高质量推理":   {"think": "on", "tb": "24000"},
+    "高并发吞吐":   {"think": "off", "conc": "4"},
+    "限制·省token": {"maxout": "8192", "tb": "8000"},
+}
+
+
+class ToolTip:
+    """极简悬停提示：鼠标悬停任意 widget 显示说明文字，移开/点击即消失。"""
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tip = None
+        widget.bind("<Enter>", self._show, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+
+    def _show(self, _e=None):
+        if not self.text or self.tip is not None:
+            return
+        try:
+            self.tip = tk.Toplevel(self.widget)
+        except Exception:
+            self.tip = tk.Toplevel()
+        try:
+            self.tip.wm_overrideredirect(True)
+            self.tip.attributes("-topmost", True)
+        except Exception:
+            pass
+        tk.Label(self.tip, text=self.text, bg="#ffffe4", fg="#222",
+                 font=("Microsoft YaHei UI", 9), wraplength=320,
+                 justify="left", padx=8, pady=6).pack()
+        try:
+            x, y = self.widget.winfo_rootx(), self.widget.winfo_rooty()
+            h = self.widget.winfo_height()
+            self.tip.wm_geometry(f"+{x+24}+{y+h+6}")
+        except Exception:
+            pass
+
+    def _hide(self, _e=None):
+        if self.tip is not None:
+            try:
+                self.tip.destroy()
+            except Exception:
+                pass
+            self.tip = None
 
 
 # ---------------------------------------------------------------
@@ -80,6 +227,13 @@ def validate(combo):
         elif ctx == "32k":
             if kv != "bf16":
                 return "DFlash2 在 32K 建议用 bf16 KV（中文接受率场景）"
+    # KV 容量不能小于上下文长度
+    kvcap = combo.get("kvcap", "default")
+    if kvcap in ("16k", "32k", "64k", "128k", "224k", "256k"):
+        ctxval = {"32k": 32768, "128k": 131072, "224k": 224000, "256k": 262144}.get(ctx, 131072)
+        capval = {"16k": 16384, "32k": 32768, "64k": 65536, "128k": 131072, "224k": 224000, "256k": 262144}[kvcap]
+        if capval < ctxval:
+            return f"KV容量({kvcap})不能小于上下文长度({ctx}={ctxval})"
     return None
 
 
@@ -91,14 +245,40 @@ def build_command(combo, port=None):
     build_val = combo.get("build", "new")
     exe = BUILD_OPTIONS[build_val][1] if build_val in BUILD_OPTIONS else BUILD_OPTIONS["new"][1]
     cmd = [exe, ARTIFACT, "--host", "127.0.0.1", "--port", str(port)]
-    cmd.extend(KV_OPTIONS[combo.get("kv", "bf16")][1])
-    cmd.extend(CTX_OPTIONS[combo.get("ctx", "32k")][1])
-    cmd.extend(SPEC_OPTIONS[combo.get("spec", "k0")][1])
+    cmd.extend(THINK_OPTIONS[combo.get("think", "on")][1])
     tb = combo.get("tb", "none")
     if tb != "none":
         cmd.extend(TB_OPTIONS[tb][1])
-    cmd.extend(["--temperature", "0.6", "--top-p", "0.95", "--tolerant-tool-calls"])
-    return exe, cmd
+    cmd.extend(MAXOUT_OPTIONS[combo.get("maxout", "default")][1])
+    cmd.extend(KV_OPTIONS[combo.get("kv", "bf16")][1])
+    kvcap = combo.get("kvcap", "default")
+    if kvcap != "default":
+        cmd.extend(KVCAP_OPTIONS[kvcap][1])
+    cmd.extend(CTX_OPTIONS[combo.get("ctx", "32k")][1])
+    cmd.extend(SPEC_OPTIONS[combo.get("spec", "k0")][1])
+    # 视觉：--vision
+    vision = combo.get("vision", "off")
+    if vision == "on":
+        cmd.extend(VISION_OPTIONS["on"][1])
+    # prefill 内核：环境变量注入
+    prefill_val = combo.get("prefill", "wide")
+    env_prefill = None
+    if prefill_val in PREFILL_OPTIONS:
+        env_prefill = PREFILL_OPTIONS[prefill_val][1]
+    # S8 int8 加速：环境变量注入（默认开=不设 NINFER_TERNARY_S8；关=设 0）
+    s8_val = combo.get("s8", "on")
+    env_s8 = None
+    if s8_val in S8_OPTIONS:
+        env_s8 = S8_OPTIONS[s8_val][1]
+    conc = combo.get("conc", "1")
+    if conc != "1":
+        cmd.extend(CONC_OPTIONS[conc][1])
+    cmd.extend(SAMPLE_OPTIONS[combo.get("sample", "default")][1])
+    preserve = combo.get("preserve", "off")
+    if preserve == "on":
+        cmd.extend(PRESERVE_OPTIONS["on"][1])
+    cmd.extend(["--tolerant-tool-calls"])
+    return exe, cmd, env_prefill, env_s8
 
 
 # ---------------------------------------------------------------
@@ -166,20 +346,45 @@ class LauncherApp:
         self._left_canvas.bind("<Enter>", lambda e: self._left_canvas.bind_all("<MouseWheel>", self._on_mousewheel))
         self._left_canvas.bind("<Leave>", lambda e: self._left_canvas.unbind_all("<MouseWheel>"))
 
+
         self.var = {}   # 每个维度选中的 tk.StringVar
         self.radios = {}
         self.combos = {}   # 用下拉框的维度（spec）
+        self._label2key = {}   # 维度: {显示label: 选项key}
+        # 场景预设（一键推荐组合）
+        preset_box = tk.LabelFrame(self.left_inner, text="场景预设（推荐）", font=("Microsoft YaHei UI", 10),
+                                   bg=self.bg, fg="#2b3a6b")
+        preset_box.pack(fill="x", pady=4)
+        ToolTip(preset_box, "按场景一键套用推荐组合。选择后自动填充下方参数。")
+        self.preset_var = tk.StringVar()
+        self.preset_cb = ttk.Combobox(preset_box, state="readonly", textvariable=self.preset_var,
+                                      width=20, font=("Microsoft YaHei UI", 9))
+        self.preset_cb["values"] = list(PRESETS.keys())
+        self.preset_cb.bind("<<ComboboxSelected>>", lambda _e: self._apply_preset())
+        self.preset_cb.pack(anchor="w", padx=8, pady=4)
+        self.preset_cb.set(list(PRESETS.keys())[0])
+
         for key, label, opts in DIMENSIONS:
             box = tk.LabelFrame(self.left_inner, text=label, font=("Microsoft YaHei UI", 10),
                                 bg=self.bg, fg="#2b3a6b")
             box.pack(fill="x", pady=4)
+            ToolTip(box, DIM_TIPS.get(key, ""))
             self.var[key] = tk.StringVar(value=DEFAULTS[key])
             if key == "spec":
                 # 投机解码：两级联动下拉 —— 类型（无/MTP/DFlash2）+ K 值
                 f = tk.Frame(box, bg=self.bg)
                 f.pack(anchor="w", padx=8, pady=4)
-                self.var_spec_type = tk.StringVar(value="MTP")
-                self.var_spec_k = tk.StringVar(value="2")
+                _spec_def = DEFAULTS.get("spec", "d7")
+                if _spec_def == "k0":
+                    _st, _sk = "无", ""
+                elif _spec_def.startswith("k"):
+                    _st, _sk = "MTP", _spec_def[1:]
+                elif _spec_def.startswith("d"):
+                    _st, _sk = "DFlash2", _spec_def[1:]
+                else:
+                    _st, _sk = "MTP", "2"
+                self.var_spec_type = tk.StringVar(value=_st)
+                self.var_spec_k = tk.StringVar(value=_sk)
                 self.combo_spec_type = ttk.Combobox(f, state="readonly", width=8,
                                                     textvariable=self.var_spec_type)
                 self.combo_spec_type["values"] = ["无", "MTP", "DFlash2"]
@@ -191,14 +396,16 @@ class LauncherApp:
                 self.combo_spec_k.pack(side="left")
                 self._update_spec_k_range()   # 设置 K 下拉范围 + 反映默认值
             else:
-                self.radios[key] = []
-                for val, (label_txt, _) in opts.items():
-                    rb = tk.Radiobutton(box, text=label_txt, variable=self.var[key], value=val,
-                                        command=self._on_change,
-                                        bg=self.bg, fg="#2b3a6b", activebackground=self.bg,
-                                        font=("Microsoft YaHei UI", 9))
-                    rb.pack(anchor="w", padx=8)
-                    self.radios[key].append(rb)
+                # 下拉菜单（紧凑面板）
+                self._label2key[key] = {lbl: val for val, (lbl, _) in opts.items()}
+                combo = ttk.Combobox(box, state="readonly", textvariable=self.var[key],
+                                     width=20, font=("Microsoft YaHei UI", 9))
+                combo["values"] = list(self._label2key[key].keys())
+                combo.bind("<<ComboboxSelected>>", lambda _e, k=key: self._on_change())
+                combo.pack(anchor="w", padx=8, pady=4)
+                dk = DEFAULTS[key]
+                combo.set(opts[dk][0] if dk in opts else next(iter(self._label2key[key])))
+
 
         # 右：命令预览 + 操作
         right = tk.Frame(main, bg=self.bg)
@@ -241,10 +448,34 @@ class LauncherApp:
     def _on_change(self):
         for key, var in self.var.items():
             if key == "spec":
-                self.selection[key] = self._spec_key_from_ui()
+                self.selection["spec"] = self._spec_key_from_ui()
+            elif key in self._label2key:
+                lbl = var.get()
+                self.selection[key] = self._label2key[key].get(lbl, key)
             else:
                 self.selection[key] = var.get()
         self._refresh()
+
+    def _apply_preset(self, _e=None):
+        """按场景预设一键套用参数组合。"""
+        name = self.preset_var.get()
+        preset = PRESETS.get(name) or {}
+        for key, val in preset.items():
+            opts = next(d[2] for d in DIMENSIONS if d[0] == key)
+            if val not in opts:
+                continue
+            if key == "spec":
+                if val == "k0":
+                    self.var_spec_type.set("无"); self.var_spec_k.set("")
+                elif val.startswith("k"):
+                    self.var_spec_type.set("MTP"); self.var_spec_k.set(val[1:])
+                elif val.startswith("d"):
+                    self.var_spec_type.set("DFlash2"); self.var_spec_k.set(val[1:])
+                self._update_spec_k_range()
+            else:
+                self.var[key].set(opts[val][0])
+        self._on_change()
+        self.status.config(text=f"已应用预设「{name}」", fg="#4a6b4a")
 
     def _update_spec_k_range(self):
         """按类型更新 K 下拉范围（MTP:1-5, DFlash2:1-15, 无:禁用）。"""
@@ -285,8 +516,15 @@ class LauncherApp:
     def _refresh(self):
         """刷新命令预览 + 校验提示"""
         err = validate(self.selection)
-        _, cmd = build_command(self.selection)
+        _, cmd, env_prefill, env_s8 = build_command(self.selection)
         cmdline = " ".join(cmd)
+        envs = []
+        if env_prefill:
+            envs.append(f"NINFER_TERNARY_PREFILL={env_prefill}")
+        if env_s8:
+            envs.append(f"NINFER_TERNARY_S8={env_s8}")
+        if envs:
+            cmdline = "[env " + " ".join(envs) + "] " + cmdline
         self.cmd_box.configure(state="normal")
         self.cmd_box.delete("1.0", "end")
         self.cmd_box.insert("1.0", cmdline)
@@ -315,9 +553,7 @@ class LauncherApp:
                     self.var_spec_type.set("DFlash2")
                     self.var_spec_k.set(val[1:])
                 self._update_spec_k_range()
-            elif key in valid_keys and val in valid_vals[key]:
-                self.var[key].set(val)
-        self._on_change()
+
 
     def _save_profile(self):
         name = tk.simpledialog.askstring("保存组合", "输入组合名称：")
@@ -343,13 +579,17 @@ class LauncherApp:
         if err:
             messagebox.showerror("参数不合法", err)
             return
-        exe, cmd = build_command(self.selection)
+        exe, cmd, env_prefill, env_s8 = build_command(self.selection)
         # 确认框
         if not messagebox.askyesno("启动确认",
                                    f"确认启动 serve？\n\n{exe}\n\n参数:\n{' '.join(cmd)}"):
             return
         env = dict(os.environ)
         env["PATH"] = BUILD_DIR + os.pathsep + env.get("PATH", "")
+        if env_prefill:
+            env["NINFER_TERNARY_PREFILL"] = env_prefill
+        if env_s8:
+            env["NINFER_TERNARY_S8"] = env_s8
         # 启动 serve：日志实时显示 + 同时落盘，关闭日志窗口即停 serve
         self._spawn_serve(cmd, env)
 
