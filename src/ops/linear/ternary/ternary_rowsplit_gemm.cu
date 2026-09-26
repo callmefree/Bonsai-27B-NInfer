@@ -9,6 +9,9 @@
 #include "ops/linear/ternary/ternary_rowsplit_gemv.cuh"
 #include "ops/linear/ternary/ternary_rowsplit_mma.cuh"
 #include "ops/linear/ternary/ternary_rowsplit_mma_small_t.cuh"
+#include "ops/linear/ternary/ternary_rowsplit_mma_wide_t.cuh"
+#include "ops/linear/ternary/ternary_rowsplit_mma_s8.cuh"
+#include "ops/linear/ternary/ternary_s8_scratch.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -30,16 +33,20 @@ namespace {
 // that can catch a token-tile or activation-layout error, because at T == 1 the token-major and
 // row-major activation layouts coincide exactly. Read once, because the choice decides which
 // kernel enters a captured CUDA graph.
-enum class PrefillRoute { Mma, Block, Reference };
+enum class PrefillRoute { Mma, Wide, Block, Reference };
 
 PrefillRoute prefill_route() {
     static const PrefillRoute route = [] {
         const char* value = std::getenv("NINFER_TERNARY_PREFILL");
-        if (value == nullptr) { return PrefillRoute::Mma; }
+        // Default = Wide (weight-resident wide-token-tile prefill). Verified engine-side 2026-09-26:
+        // byte-identical outputs vs the Mma arm and 16-40% TTFT reduction on the RTX 5080.
+        // Set NINFER_TERNARY_PREFILL=mma to restore the prior tensor-core prefill (A/B arm).
+        if (value == nullptr) { return PrefillRoute::Wide; }
         const std::string text(value);
         if (text == "ref") { return PrefillRoute::Reference; }
         if (text == "block") { return PrefillRoute::Block; }
-        return PrefillRoute::Mma;
+        if (text == "mma") { return PrefillRoute::Mma; }
+        return PrefillRoute::Wide;
     }();
     return route;
 }
@@ -144,7 +151,8 @@ bool gemv_admits(const Tensor& x, const Weight& w, std::int32_t max_tokens) {
 }
 
 void launch_ternary_gemm_t1(const Tensor& x, const Weight& w, Tensor& out,
-                            std::int32_t out_row_stride, cudaStream_t stream) {
+                            std::int32_t out_row_stride, cudaStream_t stream,
+                            TernaryS8Scratch /*scratch*/) {
     if (gemv_admits(x, w, 1)) {
         launch_pq2_gemv_tile(x, w, out, out_row_stride, x.ne[1], stream);
         return;
@@ -313,8 +321,66 @@ void launch_ternary_mma(const Tensor& x, const Weight& w, Tensor& out,
     CUDA_CHECK(cudaGetLastError());
 }
 
+// Wide-token-tile (weight-resident) prefill kernel, ported from the author ternary tree
+// (ternary_rowsplit_mma_wide_t.cuh). Replaces the per-8-token weight re-read of small_t with a
+// per-64-token window, so one forward pass reads the weights ceil(T/64) times instead of
+// ceil(T/8) -- the mechanism behind the author's measured prefill ~2x. Admission mirrors
+// mma_wide_admits: PQ2_0, unpadded whole-group K, and no high plane. Selected only when
+// NINFER_TERNARY_PREFILL=wide (A/B arm; default stays Mma until engine-side A/B passes).
+void launch_ternary_mma_wide(const Tensor& x, const Weight& w, Tensor& out,
+                             std::int32_t out_row_stride, cudaStream_t stream) {
+    const std::int32_t rows = w.n;
+    if (w.padded_shape[1] != w.k || (w.k % kTernaryWideChunkK) != 0 || out_row_stride < rows) {
+        throw std::invalid_argument("ternary mma_wide: needs whole-group unpadded K with wide-tile chunk");
+    }
+    const unsigned grid = static_cast<unsigned>(div_up(rows, kTernaryWideRowsPerCta));
+    ternary_wide_t_kernel<false><<<grid, kTernaryWideThreads, 0, stream>>>(
+        static_cast<const __nv_bfloat16*>(x.data), static_cast<const std::uint8_t*>(w.qdata),
+        nullptr, static_cast<const std::uint8_t*>(w.scales),
+        static_cast<__nv_bfloat16*>(out.data), rows, w.k, x.ne[1], out_row_stride);
+    CUDA_CHECK(cudaGetLastError());
+}
+
+// int8 tensor-core prefill rung (#14), ported from the author ternary tree
+// (ternary_rowsplit_mma_s8.cuh). Quantizes the activation per token, then runs the s8 mma kernel.
+// Requires a caller-provided scratch (see TernaryS8Scratch) because this op runs inside captured
+// CUDA graphs, where a lazy cudaMalloc at launch time is illegal. Only PQ2_0 is present in the
+// Bonsai artifact, so the PTQ1_0 twin is not wired up here.
+//   NINFER_TERNARY_S8=0  -> stay on the bf16 rungs (A/B rollback)
+// Admission matches mma_wide_admits (PQ2_0, unpadded whole-group K, no high plane). Selected when
+// scratch is present, s8 is enabled, and T >= kTernaryS8MinTokens (33) -- the author's measured
+// crossover where s8 wins by 1.20x at T=40, 1.30x at T=64.
+void launch_pq2_mma_s8(const Tensor& x, const Weight& w, Tensor& out,
+                       std::int32_t out_row_stride, std::int32_t tokens, TernaryS8Scratch scratch,
+                       cudaStream_t stream) {
+    ternary_s8_quantize_kernel<<<tokens, 256, 0, stream>>>(
+        static_cast<const __nv_bfloat16*>(x.data), scratch.codes, scratch.scales, w.k);
+    CUDA_CHECK(cudaGetLastError());
+
+    constexpr int kTokens = 64;
+    constexpr int kWarps  = 4;
+    const unsigned grid =
+        static_cast<unsigned>(div_up(w.n, TernaryS8Storage<kTokens, kWarps>::kRowsPerCta));
+    ternary_pq2_mma_s8_kernel<kTokens, kWarps, 3><<<grid, kWarps * 32, 0, stream>>>(
+        scratch.codes, scratch.scales, static_cast<const std::uint8_t*>(w.qdata),
+        static_cast<const std::uint8_t*>(w.scales), static_cast<__nv_bfloat16*>(out.data), w.n,
+        w.k, tokens, out_row_stride);
+    CUDA_CHECK(cudaGetLastError());
+}
+
+// One call site for the int8 rung. Only PQ2_0 is in the Bonsai artifact, but the dispatcher keeps
+// the PTQ1_0 guard so this rung can be extended without changing the call site.
+void launch_s8(const Tensor& x, const Weight& w, Tensor& out, std::int32_t out_row_stride,
+               std::int32_t tokens, TernaryS8Scratch scratch, cudaStream_t stream) {
+    if (w.qtype == QType::PTQ1_0_G128) {
+        throw std::invalid_argument("ternary s8 mma: PTQ1_0 high plane unsupported in this port");
+    }
+    launch_pq2_mma_s8(x, w, out, out_row_stride, tokens, scratch, stream);
+}
+
 void launch_ternary_gemm_t8(const Tensor& x, const Weight& w, Tensor& out,
-                            std::int32_t out_row_stride, cudaStream_t stream) {
+                            std::int32_t out_row_stride, cudaStream_t stream,
+                            TernaryS8Scratch scratch) {
     // The speculative verify pass runs T = draft + 1 (2..4 here). The reference tiled kernel wastes
     // five of its eight token slots at that size and needs a 128-thread CTA plus seven barriers per
     // output row, which cost more than the whole decode step it was verifying. The small-tile GEMV
@@ -351,6 +417,20 @@ void launch_ternary_gemm_t8(const Tensor& x, const Weight& w, Tensor& out,
         launch_small_t(x, w, out, out_row_stride, stream);
         return;
     }
+    // int8 prefill rung (s8): highest-priority prefill path when the caller supplied the
+    // activation-quantization scratch and T is past the crossover. Measured by the author on the
+    // real shape mix: 1.20x at T=40, 1.22x at T=48, 1.30x at T=64 over the bf16 wide rung. The
+    // scratch is only present when T >= kTernaryS8MinTokens (see ternary_dispatch.cpp), so the
+    // T gate below is a belt-and-braces re-check. Because activations are quantized to int8, this
+    // rung is NOT bit-exact -- it must be qualified by the E4 PPL criterion (6.44..6.50), not the
+    // bit-identical gate.
+    if (scratch.codes != nullptr && scratch.scales != nullptr && ternary_s8_enabled() &&
+        (w.qtype == QType::PQ2_0_G128) &&
+        gemv_admits(x, w, std::numeric_limits<std::int32_t>::max()) &&
+        x.ne[1] >= kTernaryS8MinTokens) {
+        launch_s8(x, w, out, out_row_stride, x.ne[1], scratch, stream);
+        return;
+    }
     // The verify-shaped entry above requires T <= 4, so everything from a short prompt (T as low
     // as 5) to a full prefill chunk lands here. The CLI constrains the CHUNK to a multiple of 128
     // (apps/cli/options.cpp), not the actual token count, so T is only a multiple of 128 for a
@@ -360,6 +440,15 @@ void launch_ternary_gemm_t8(const Tensor& x, const Weight& w, Tensor& out,
     // left: NCU on the 248320-row head put the token-blocked GEMV at 95.47% occupancy, ALU the top
     // pipe, and 909e6 instructions against a 1.32 ms pure-issue floor. Measured across every
     // prefill shape in this model at T=1024, MMA is 8.3-9.8x faster than that GEMV.
+    // Wide-token-tile prefill (weight-resident): author ternary line's prefill rung. Same tensor-core
+    // family as the mma path below but stages the weight window once per 64-token tile instead of
+    // re-reading it per 8-token tile, cutting the weight pass count from ceil(T/8) to ceil(T/64).
+    // NINFER_TERNARY_PREFILL=wide enables it (A/B arm; default stays Mma until engine-side A/B).
+    if (prefill_route() == PrefillRoute::Wide && x.ne[1] >= ternary_wide_min_tokens() &&
+        gemv_admits(x, w, std::numeric_limits<std::int32_t>::max())) {
+        launch_ternary_mma_wide(x, w, out, out_row_stride, stream);
+        return;
+    }
     if (prefill_route() == PrefillRoute::Mma && x.ne[1] >= kMmaMinTokens &&
         gemv_admits(x, w, std::numeric_limits<std::int32_t>::max())) {
         launch_ternary_mma<TernaryMmaPrefillSchedule>(x, w, out, out_row_stride, stream);

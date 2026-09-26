@@ -37,7 +37,10 @@ void ternary_dispatch_basis_strided(const Tensor& x_folded, const Weight& w, Ten
                                     std::int32_t out_row_stride, LinearPolicy policy,
                                     cudaStream_t stream) {
     const TernaryLaunch launch = select_ternary_launch(w.n, w.k, x_folded.ne[1], policy);
-    launch(x_folded, w, out, out_row_stride, stream);
+    // No workspace on this entry point: the caller already folded the activation, and may hand in
+    // the int8 scratch it allocated from its own arena. With an empty scratch these calls stay on
+    // the bf16 rungs, which is what they did before the s8 rung existed.
+    launch(x_folded, w, out, out_row_stride, stream, TernaryS8Scratch{});
 }
 
 void ternary_dispatch_basis(const Tensor& x_folded, const Weight& w, Tensor& out,
@@ -54,7 +57,7 @@ void ternary_dispatch(const Tensor& x, const Weight& w, Tensor& out, LinearPolic
         // pass (and therefore the M4 decode speed) is measurable. The result is numerically
         // meaningless -- the activation is in the wrong basis -- which is the point: it separates
         // "the ternary decode is broken" from "the rotation is broken" without a rebuild.
-        launch(x, w, out, w.n, stream);
+        launch(x, w, out, w.n, stream, TernaryS8Scratch{});
         return;
     }
     if (workspace == nullptr) {
@@ -72,7 +75,20 @@ void ternary_dispatch(const Tensor& x, const Weight& w, Tensor& out, LinearPolic
     // fails loudly here instead of silently multiplying by unfolded weights.
     auto scope              = workspace->scope();
     const Tensor activation = folded_activation(x, w, *workspace, stream);
-    launch(activation, w, out, w.n, stream);
+
+    // int8 rung scratch (#14): one int8 code row per token plus one fp32 scale per token. Taken
+    // from the same arena the rotation just used, and counted by ternary_rotation_workspace_bytes()
+    // so the planner sizes the arena for it -- allocating it lazily inside the launch would be
+    // illegal, because this op runs inside captured CUDA graphs. Below the threshold the scratch is
+    // left empty and the launch falls through to the bf16 rungs.
+    TernaryS8Scratch scratch{};
+    if (x.ne[1] >= kTernaryS8MinTokens) {
+        const DeviceSpan codes  = workspace->alloc_bytes(ternary_s8_codes_bytes(w.k, x.ne[1]));
+        const DeviceSpan scales = workspace->alloc_bytes(ternary_s8_scales_bytes(x.ne[1]));
+        scratch.codes           = static_cast<std::int8_t*>(codes.data);
+        scratch.scales          = static_cast<float*>(scales.data);
+    }
+    launch(activation, w, out, w.n, stream, scratch);
 }
 
 } // namespace ninfer::ops::detail
