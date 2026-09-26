@@ -107,17 +107,15 @@ VISION_OPTIONS = {
     "off": ("关闭", []),
     "on":  ("开启", ["--vision"]),
 }
-# prefill 内核：WIDE_T（权重驻留，新默认，prefill 翻倍）/ MMA（原 tensor-core）。
-# 通过环境变量 NINFER_TERNARY_PREFILL 控制（引擎进程级），非命令行参数。
+# prefill 内核：三选一互斥（引擎派发只走一条，s8 优先于 wide/mma，绝不同时运行）。
+#   s8   int8 量化激活后 tensor-core，T>=33 时比 bf16 wide 快 1.2-1.3x（作者实测最快）
+#   wide 权重驻留 wide-token-tile
+#   mma  原 tensor-core
+# 通过环境变量控制（引擎进程级）：NINFER_TERNARY_PREFILL 选 wide/mma；选 s8 时设 NINFER_TERNARY_S8=1。
 PREFILL_OPTIONS = {
-    "wide": ("WIDE_T(权重驻留·快)", "wide"),
-    "mma":  ("MMA(原tensor-core)", "mma"),
-}
-# S8 int8 prefill rung：作者实测最快的 prefill 内核（int8 量化激活后 mma，T>=33 时比 bf16 wide 快 1.2-1.3x）。
-# 通过环境变量 NINFER_TERNARY_S8 控制（引擎进程级），默认开。与 prefill 正交：S8 优先，其次 wide/mma。
-S8_OPTIONS = {
-    "on":  ("S8(int8·最快)", None),
-    "off": ("关S8(bf16)", "0"),
+    "s8":   ("S8(int8·最快)",  None, "1"),
+    "wide": ("WIDE_T(权重驻留·快)", "wide", "0"),
+    "mma":  ("MMA(原tensor-core)", "mma", "0"),
 }
 
 DIMENSIONS = [
@@ -130,7 +128,6 @@ DIMENSIONS = [
     ("ctx",     "上下文",   CTX_OPTIONS),
     ("spec",    "投机解码", SPEC_OPTIONS),
     ("prefill", "prefill内核", PREFILL_OPTIONS),
-    ("s8",      "S8加速",   S8_OPTIONS),
     ("vision",  "视觉",     VISION_OPTIONS),
     ("conc",    "并发度",   CONC_OPTIONS),
     ("sample",  "采样",     SAMPLE_OPTIONS),
@@ -138,7 +135,7 @@ DIMENSIONS = [
 ]
 
 # 默认选中值
-DEFAULTS = {"think": "on", "tb": "none", "maxout": "default", "build": "new", "kv": "k8v4", "kvcap": "default", "ctx": "128k", "spec": "d7", "prefill": "wide", "s8": "on", "vision": "off", "conc": "1", "sample": "default", "preserve": "off"}
+DEFAULTS = {"think": "on", "tb": "none", "maxout": "default", "build": "new", "kv": "k8v4", "kvcap": "default", "ctx": "128k", "spec": "d7", "prefill": "s8", "vision": "off", "conc": "1", "sample": "default", "preserve": "off"}
 
 
 # ---------------------------------------------------------------
@@ -153,8 +150,7 @@ DIM_TIPS = {
     "kvcap":   "KV 容量预算。不能小于上下文长度；更小=更省显存更快。",
     "ctx":     "上下文长度。128K 常用；长对话可更大；短文本/审核建议小（快）。",
     "spec":    "投机解码：DFlash2/MTP 加速生成，K 越大草稿越多、加速越多但收益递减。",
-    "prefill": "prefill 内核。WIDE_T=权重驻留（新默认，prefill 快 16-40%）；MMA=原 tensor-core。通过环境变量切换。",
-    "s8":     "S8 int8 加速（作者实测最快 prefill 内核）：把激活量化到 int8 后走 tensor-core，T>=33 时比 wide 再快 1.2-1.3x。默认开；关则回到 bf16 档。",
+    "prefill": "prefill 内核（三选一，互斥，绝不同时运行）。S8=int8 量化 tensor-core（T>=33 最快）；WIDE_T=权重驻留；MMA=原 tensor-core。默认 S8。",
     "vision":  "视觉（多模态）：开启后支持图片输入（--vision）。模型内置视觉塔，无需另下文件。",
     "conc":    "并发请求数 1-8。多请求吞吐场景用大值；单会话保持 1。",
     "sample":  "采样预设。默认 0.6/0.95 平衡；贪心最稳；创意更发散。",
@@ -260,16 +256,13 @@ def build_command(combo, port=None):
     vision = combo.get("vision", "off")
     if vision == "on":
         cmd.extend(VISION_OPTIONS["on"][1])
-    # prefill 内核：环境变量注入
-    prefill_val = combo.get("prefill", "wide")
+    # prefill 内核：三选一互斥，环境变量注入（s8 与 wide/mma 不可同开，同一时刻引擎只走一条）
+    prefill_val = combo.get("prefill", "s8")
     env_prefill = None
+    env_s8 = None
     if prefill_val in PREFILL_OPTIONS:
         env_prefill = PREFILL_OPTIONS[prefill_val][1]
-    # S8 int8 加速：环境变量注入（默认开=不设 NINFER_TERNARY_S8；关=设 0）
-    s8_val = combo.get("s8", "on")
-    env_s8 = None
-    if s8_val in S8_OPTIONS:
-        env_s8 = S8_OPTIONS[s8_val][1]
+        env_s8 = PREFILL_OPTIONS[prefill_val][2]
     conc = combo.get("conc", "1")
     if conc != "1":
         cmd.extend(CONC_OPTIONS[conc][1])
