@@ -113,9 +113,9 @@ VISION_OPTIONS = {
 #   mma  原 tensor-core
 # 通过环境变量控制（引擎进程级）：NINFER_TERNARY_PREFILL 选 wide/mma；选 s8 时设 NINFER_TERNARY_S8=1。
 PREFILL_OPTIONS = {
-    "s8":   ("S8(int8·最快)",  None, "1"),
-    "wide": ("WIDE_T(权重驻留·快)", "wide", "0"),
-    "mma":  ("MMA(原tensor-core)", "mma", "0"),
+    "s8":   ("S8(int8·最快)",  {"prefill": None, "s8": "1"}),
+    "wide": ("WIDE_T(权重驻留·快)", {"prefill": "wide", "s8": "0"}),
+    "mma":  ("MMA(原tensor-core)", {"prefill": "mma", "s8": "0"}),
 }
 
 DIMENSIONS = [
@@ -257,12 +257,13 @@ def build_command(combo, port=None):
     if vision == "on":
         cmd.extend(VISION_OPTIONS["on"][1])
     # prefill 内核：三选一互斥，环境变量注入（s8 与 wide/mma 不可同开，同一时刻引擎只走一条）
+    # prefill 内核：三选一互斥，环境变量注入（s8 与 wide/mma 不可同开，同一时刻引擎只走一条）
     prefill_val = combo.get("prefill", "s8")
     env_prefill = None
     env_s8 = None
     if prefill_val in PREFILL_OPTIONS:
-        env_prefill = PREFILL_OPTIONS[prefill_val][1]
-        env_s8 = PREFILL_OPTIONS[prefill_val][2]
+        env_prefill = PREFILL_OPTIONS[prefill_val][1]["prefill"]
+        env_s8 = PREFILL_OPTIONS[prefill_val][1]["s8"]
     conc = combo.get("conc", "1")
     if conc != "1":
         cmd.extend(CONC_OPTIONS[conc][1])
