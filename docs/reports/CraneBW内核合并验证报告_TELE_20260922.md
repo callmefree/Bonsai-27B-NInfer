@@ -1,14 +1,3 @@
----
-AIGC:
-  ContentProducer: '001191110102MAD55U9H0F10002'
-  ContentPropagator: '001191110102MAD55U9H0F10002'
-  Label: '1'
-  ProduceID: '20b28b7c-021e-4220-ade3-62b8ce555932'
-  PropagateID: '20b28b7c-021e-4220-ade3-62b8ce555932'
-  ReservedCode1: 'e23b5344-7520-4320-a72a-ce81b977f362'
-  ReservedCode2: 'e23b5344-7520-4320-a72a-ce81b977f362'
----
-
 # CraneBW 内核合并验证报告（TeleAgent）
 
 > 执行：TeleAgent，2026-09-22 03:00–04:30（用户"开始"信号后）

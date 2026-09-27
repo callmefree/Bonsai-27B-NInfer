@@ -1,14 +1,3 @@
----
-AIGC:
-  ContentProducer: '001191110102MAD55U9H0F10002'
-  ContentPropagator: '001191110102MAD55U9H0F10002'
-  Label: '1'
-  ProduceID: '52843e76-2c5d-4bd0-a8f8-50a25b99e280'
-  PropagateID: '52843e76-2c5d-4bd0-a8f8-50a25b99e280'
-  ReservedCode1: 'b7910909-9776-4ac7-8099-05401390e446'
-  ReservedCode2: 'b7910909-9776-4ac7-8099-05401390e446'
----
-
 # CraneBW 三元 Tensor-Core 内核合并方案（TeleAgent）
 
 > 撰写：TeleAgent，2026-09-22（M6 关单后 / 用户批准合并后、等"开始"信号前完成准备）

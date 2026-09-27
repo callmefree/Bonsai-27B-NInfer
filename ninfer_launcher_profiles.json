@@ -178,5 +178,20 @@
     "conc": "1",
     "sample": "default",
     "preserve": "on"
+  },
+  "180K DF7 无视觉": {
+    "think": "on",
+    "tb": "32000",
+    "maxout": "default",
+    "build": "new",
+    "kv": "k8v4",
+    "kvcap": "180k",
+    "ctx": "180k",
+    "spec": "d7",
+    "prefill": "s8",
+    "vision": "off",
+    "conc": "1",
+    "sample": "default",
+    "preserve": "on"
   }
 }

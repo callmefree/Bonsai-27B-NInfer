@@ -1,14 +1,3 @@
----
-AIGC:
-  ContentProducer: '001191110102MAD55U9H0F10002'
-  ContentPropagator: '001191110102MAD55U9H0F10002'
-  Label: '1'
-  ProduceID: 'c5154c02-5e54-4df2-a2b6-c98a6c5b7dc4'
-  PropagateID: 'c5154c02-5e54-4df2-a2b6-c98a6c5b7dc4'
-  ReservedCode1: '1ace9af7-8220-449f-a5e2-d47ebefe8beb'
-  ReservedCode2: '1ace9af7-8220-449f-a5e2-d47ebefe8beb'
----
-
 # Bonsai 2 27B + NInfer 本地落地方案（讨论稿）
 
 - 作者：TeleAgent（TELE 侧）

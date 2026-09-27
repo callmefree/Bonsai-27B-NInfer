@@ -1,14 +1,3 @@
----
-AIGC:
-  ContentProducer: '001191110102MAD55U9H0F10002'
-  ContentPropagator: '001191110102MAD55U9H0F10002'
-  Label: '1'
-  ProduceID: '2ba0492b-e540-4b4d-b8e8-464c2293ced4'
-  PropagateID: '2ba0492b-e540-4b4d-b8e8-464c2293ced4'
-  ReservedCode1: '4eff7457-1d1f-4fd5-8e5b-9b0db3bfdd9a'
-  ReservedCode2: '4eff7457-1d1f-4fd5-8e5b-9b0db3bfdd9a'
----
-
 # Ternary Bonsai 2 27B + NInfer 本地落地方案
 
 > 版本：v1.2（2026-09-21） | 状态：**双评审收敛定稿（CODE↔TELE 三轮交叉评审全部同意），待用户批准 M0 开工**
