@@ -1,15 +1,14 @@
 @echo off
 chcp 65001 >nul
-title NInfer Launcher
 rem ============================================================
-rem  NInfer launcher entry. Double-click to open the GUI.
-rem  No args -> run the GUI with pythonw (no blank CMD window).
-rem  CLI args (profile/--list/--dry-run) -> use python so output
-rem  stays visible in this console window.
+rem  NInfer launcher. Double-click to open the GUI.
+rem  GUI (no args): start pythonw via `start`, so the bat's own
+rem  CMD window closes immediately (no blank window lingers).
+rem  CLI (profile/--list/--dry-run): run python so output shows.
 rem ============================================================
 cd /d J:\Bonsai
 if "%~1"=="" (
-    "D:\Python311\pythonw.exe" ninfer_launcher.py
+    start "NInfer-Launcher" "D:\Python311\pythonw.exe" "J:\Bonsai\ninfer_launcher.py"
 ) else (
     "D:\Python311\python.exe" ninfer_launcher.py %*
     echo.
