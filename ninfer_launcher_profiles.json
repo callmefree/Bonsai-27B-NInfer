@@ -193,5 +193,50 @@
     "conc": "1",
     "sample": "default",
     "preserve": "on"
+  },
+  "150K df7 视觉": {
+    "think": "on",
+    "tb": "32000",
+    "maxout": "default",
+    "build": "new",
+    "kv": "k8v4",
+    "kvcap": "150k",
+    "ctx": "150k",
+    "spec": "d7",
+    "prefill": "s8",
+    "vision": "on",
+    "conc": "1",
+    "sample": "default",
+    "preserve": "on"
+  },
+  "160K df7 视觉": {
+    "think": "on",
+    "tb": "32000",
+    "maxout": "default",
+    "build": "new",
+    "kv": "k8v4",
+    "kvcap": "160k",
+    "ctx": "160k",
+    "spec": "d7",
+    "prefill": "s8",
+    "vision": "on",
+    "conc": "1",
+    "sample": "default",
+    "preserve": "on"
+  },
+  "170K df7 视觉": {
+    "think": "on",
+    "tb": "32000",
+    "maxout": "default",
+    "build": "new",
+    "kv": "k8v4",
+    "kvcap": "170k",
+    "ctx": "170k",
+    "spec": "d7",
+    "prefill": "s8",
+    "vision": "on",
+    "conc": "1",
+    "sample": "default",
+    "preserve": "on"
   }
 }
