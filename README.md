@@ -3,106 +3,118 @@ AIGC:
   ContentProducer: '001191110102MAD55U9H0F10002'
   ContentPropagator: '001191110102MAD55U9H0F10002'
   Label: '1'
-  ProduceID: 'bda15991-1de3-457b-91b8-6aa2a7e225aa'
-  PropagateID: 'bda15991-1de3-457b-91b8-6aa2a7e225aa'
-  ReservedCode1: 'e09d8d33-fd83-4be4-b93f-96879ea82e22'
-  ReservedCode2: 'e09d8d33-fd83-4be4-b93f-96879ea82e22'
+  ProduceID: '4d0602ee-d3e7-40a3-b509-433c10b2e934'
+  PropagateID: '4d0602ee-d3e7-40a3-b509-433c10b2e934'
+  ReservedCode1: 'dad92cf9-39df-431f-aad5-42b83229faab'
+  ReservedCode2: 'dad92cf9-39df-431f-aad5-42b83229faab'
 ---
 
 # Bowsai-NInfer — RTX 5080 三元量化复现指南
 
-> 本仓库在 **RTX 5080（16GB）** 上跑通了 **Bowsai-2-27B 三元量化模型**（`Ternary-Bonsai-2-27B.ninfer`）。
-> 名字里的 "4090" 是上游沿用，**本 fork 实测平台是 5080**。
-> 这份 README 是**能照做的复现手册**：从拿到论文 → 到跑起来，每一步怎么做、踩过什么坑，全在这里。
-> 逐日原始记录：Bowsai 主库 `docs/项目构建史.md`。
+> 本仓库在 **RTX 5080（16GB）** 跑通了 **Bowsai-2-27B 三元量化模型**（`Ternary-Bonsai-2-27B.ninfer`）。
+> 名字"4090"是上游沿用，**本 fork 实测平台是 5080**。
+> 这份 README 是**复现索引**：每一步要去看什么（文件/命令/报告/源码位置）都列出来，
+> 让复现者**自己照着查证推进**，而不是靠我口头转述。
 
 ---
 
-## 一、你要复现的东西
+## 0. 先看这四样（搞清楚全貌再动手）
 
-在 16GB 显卡上，用 **2.125bit 三元量化**跑 **27B 模型**，达到：
-- 智力不塌（PPL 6.1129）、显存可控（权重 6.7GiB + KV 分页）、速度可接受
-- 长上下文（256K）可跑
+| 要看什么 | 在哪 |
+|---|---|
+| 完整开发史（M0–M8 逐日原始记录） | Bowsai 主库 `docs/项目构建史.md` |
+| 技术论文《三元-Bonsai-27B-NInfer-移植》 | `三元-Bonsai-27B-NInfer-移植-技术论文-20260920.pdf` |
+| 作者工具链说明 docs/01–04 | `landing/tools/ninfer-ada-ternary/docs/` |
+| 各里程碑报告（M0–M6 + CraneBW + A/B） | Bowsai 主库 `docs/reports/` |
 
-一句话：**27B + 三元量化 + 16GB 卡，不是传说，是能复现的路线。**
+---
 
-## 二、先准备什么（前置材料）
+## 一、我们要复现的东西
 
-| 材料 | 来源 | 作用 |
-|---|---|---|
-| 技术论文《三元-Bonsai-27B-NInfer-移植》 | 作者分发（ModelScope） | 宪法级文档，先读 |
-| 作者三元工具链 `ninfer-ada-ternary` | ModelScope `shensanshu/ninfer-ada-ternary` | docs/01-04 + patches + pack.py + MAPPING.json + verify |
-| 引擎基线 | Ambolio/ninfer-4090-windows @ 6eb70a0（v1.0.8） | 本 fork 的起点 |
-| 优化内核 | CraneBW/ninfer-ternary-bonsai-ada | prefill 提速 |
-| 模型权重 | Qwen3.8-27B（HF 18 分片）+ 量化 GGUF（PQ2_0/PTQ1_0）+ DFlash2 | 见"第3步" |
+**16GB 卡 + 2.125bit 三元量化跑 27B**，智力不塌（PPL 6.1129）、显存可控、256K 长上下文可跑。
 
-## 三、复现路线（7 步，照做）
+## 二、7 步复现路线（每步标明"要看什么"）
 
-### 第 1 步：锁定来源
-- 作者补丁基线 = **Ambolio v1.0.8 @ 6eb70a0**，不是上游官方线（官方线走法不同，别搞混）。
-- 工具仓锁定 commit（pack.py 拒绝非 groupwise-int 模板 up front 那版）。
+### 第 1 步 · 锁定来源
+- **要看的**：构建史 §2 上游血统表；作者 ModelScope 仓 `shensanshu/ninfer-ada-ternary`；基线 `Ambolio/ninfer-4090-windows @ 6eb70a0`。
+- 关键：补丁基线 = **Ambolio v1.0.8**，不是官方线。工具仓锁 commit（pack.py 拒绝非 groupwise-int 模板那版）。
 
-### 第 2 步：下载权重（约 70GB）
-- Qwen3.8-27B 底座 18 分片（HF `prism-ml/bonsai-2`）
-- 量化 GGUF：`PQ2_0`（7.2G）/ `PTQ1_0`（5.9G）二选一 + DFlash2 草稿组件
-- ⚠️ **坑1（代际）**：制品有 v1/v2/v3 代际，引擎**只认本代**。确认制品的 magic 字节 = 对应引擎代（我们的 = v2，与 v1.0.8 自洽）。
+### 第 2 步 · 下载权重（~70GB）
+- **要看的**：HF `prism-ml/bonsai-2`；量化 GGUF 清单（PQ2_0 7.2G / PTQ1_0 5.9G / mmproj）；DFlash2 组件。
+- **要看制品代际**：`<制品>.ninfer` magic 字节，确认引擎代。我们的 = 02（v2，与 v1.0.8 自洽）。
 
-### 第 3 · 打包模板制品（M2–M3）
-1. 先转 **bf16 模板**：`qwen3_8_27b.ninfer`（19.03 GiB / 1190 对象）。需要 **torch 2.2+cu130 + RAM≥64GB**（本机 127.8GB），转换约 114 秒。
-2. 再用作者 `pack.py` 打**三元制品**：`Ternary-Bonsai-2-27B.ninfer`（9.81 GiB / 1192 对象 = 1190 + mtp 2）。
-3. ⚠️ **坑2（发布缺件）**：作者发布包缺 ①Python 侧格式注册（`numeric.py`）②`_ternary_ref.py`。**不用改上游包**，写运行时 shim（`ternary_shim.py`）注入即可。
-4. **六项验证链必须全 PASS**：pack check / build / payload_order / signs / row_order / assembly（15/15，duplicated=0）。
-5. ⚠️ **坑3（visual）**：视觉（ViT/mmproj）**不打包**——该 fork 不支持图片输入，视觉走外部模型。
+### 第 3 步 · 打包模板 + 三元制品
+- **要看**：作者工具链 `landing/ninfer-ada-ternary/`（docs/01-04 + patches + `pack.py` + `MAPPING.json` + `verify`）。
+- 产物（本机已有，可对照）：
+  - 模板 `landing/artifacts/qwen3_8_27b.ninfer`（19.03 GiB/1190 对象）+ 它的 `qwen3_8_27b.ninfer.conversion.json`（转换报告，看配置）
+  - 三元 `landing/artifacts/Ternary-Bonsai-2-27B.ninfer`（9.81 GiB/1192 对象）
+  - `bonsai2-hadamard-meta.json`（折叠基变换元数据）
+- **坑（发布缺件）**：作者包缺 `numeric.py` / `_ternary_ref.py` → 用运行时 shim `landing/tools/ternary_shim.py`，**不改上游**。
+- 六项验证链（pack check/build/payload_order/signs/row_order/assembly）必须全 PASS。
 
-### 第 4 · 构建引擎（M4）
-1. 前置硬门槛（基线 CMakeLists 检查）：**CUDA ≥13.1**（本机 13.0 不够，旁装 13.3）+ **仓根 `ffmpeg\`**（MSVC 分支硬编码，MEDIA_ACQUIRE 强制 ON，缺目录编不过）。
-2. ⚠️ **坑4（arch 守卫）**：基线 `device.h` 对非 sm_89 直接 `#error`。解法 = CMake 架构列表改 `89|120a` 复用 SM89 路径，生成**原生 sm_120a SASS**（用 `cuobjdump` 验证，防 JIT 伪装）。
-3. 编译：`cmake -B _build_5080 -G Ninja -DCMAKE_CUDA_ARCHITECTURES=89 ...` + `cmake --build`。
+### 第 4 步 · 构建引擎（M4）
+- **要看**：
+  - 基线 `build_v1.0.8.bat`（构建配方）
+  - 基线 `CMakeLists.txt` **L59-62**（CUDA ≥13.1 硬门）、**L82-85**（仓根 `ffmpeg\` 硬依赖）
+  - `device.h`（非 sm_89 的 `#error` 守卫）→ 改 CMake 架构列表 `89|120a`
+  - 用 `cuobjdump` 验 **sm_120a SASS**（防 JIT 伪装）
+- 本报告用 CUDA 13.3 旁装，构建目录 `_build_5080`。
 
-### 5 · 验收（M5）
-- **PPL 6.1129**（1,044,557 tokens）——注意 PPL 判据带 ≤6.8，越低越好。
-- **显存账本三场景**实测，验证占用与账面吻合。
-- 这里有个未的坑见"坑汇总"。
+### 第 5 步 · 验收（M5）
+- **要看**：报告 `M5端到端验收报告`；`report.json`（PPL 原始值）。
+- 判据：PPL ≤6.8（越低越好），我们 6.1129。
+- 显存账本三场景，验证占用与账面吻合。
 
-### 6 · 速度标定（M6）
-- 三档：裸 decode / MTP / DFlash2。我们 5080 上：裸 68、MTP 见矩阵、DFlash2 英文 104.7（中文负收益，慎用）。
+### 第 6 步 · 速度标定（M6）
+- **要看**：`M6` 报告 + 三档验证脚本。
+- 5080 实测：裸 decode 68 / MTP / DFlash2 英文 104.7（中文负收益）。
 
-### 7 · 提速内核（M7 + 后续）
-- **合并 CraneBW 内核**：prefill 600→1288 t/s，decode K1 zh +44%。
-- ⚠️ **坑5（漏合）**：CraneBW 声称 8 文件，实际漏了 `gemv.cuh`（新 kernel 未并），首编 12 error 才补上——合并要**逐文件核对，别信"x 个文件"**。
-- 后续移植 **s8（int8）+ wide_t prefill 内核**：冷 prefill **1.63k tok/s**（主推档）。
+### 第 7 步 · 提速内核（M7 + 后续）
+- **要看**：`CraneBW/ninfer-ternary-bonsai-ada`（比对 `verify`）；合并方案 `CraneBW内核合并方案`；报告 `CraneBW内核合并验证报告`。
+- 结果：prefill 600→1288；后续 s8/wide_t 移植 → 冷 prefill **1.63k**。
+- **坑**：CraneBW 声称 8 文件，漏合 `gemv.cuh`（新 kernel 未并）→ 首编 12 error。逐文件核对，别信"x 个文件"。
 
-## 四、起服与档位（你跑起来要看这个）
+---
 
-一套 BAT（Bowsai 主库）可选用：
+## 三、起服与档位（要看：serve --help / BAT 参数）
+
+- 一套 BAT 在 Bowsai 主库，命令要点见下表：
 
 | 档位 | 命令要点 | 5080 实测 |
 |---|---|---|
-| 日常 fp8 | `--kv-dtype fp8 --spec mtp --draft-tokens 2 --max-concurrency 2` | **114.3 t/s** |
-| k8v4-224K | `--kv-dtype k8v4 --kv-capacity 224000...` | 95.7 |
-| k8v4-256K-MTP | 256K + MTP K=2 | **105.2**（终极，余 ~0.6G 临界）|
-| DFlash2 英文 | `--spec dflash2 --draft-tokens 7 --lm-head-draft` | **139.5**（中文勿用）|
+| 日常 fp8 | `--kv-dtype fp8 --spec mtp --draft-tokens 2 --max-concurrency 2` | 114.3 t/s |
+| k8v4-224K | `--kv-dtype k8v4 --kv-capacity ...` | 95.7 |
+| k8v4-256K-MTP | 256K + MTP K=2 | 105.2（终极，余 ~0.6G 临界）|
+| DFlash2 英文 | `--spec dflash2 --draft-tokens 7 --lm-head-draft` | 139.5（中文勿用）|
 
-⚠️ **坑（并发/显存）**：并发 2 会挤爆剩余显存（`preparing CUDA graphs bad allocation`），小余量档位**并发 1**。MTP K 从 1→2 转正，K=3 过临界回落，5080 上 **K=2 最优**。
+- 每个档位**要看对应 BAT 的完整参数**（`起服-*.bat` 就是现成样板，改路径即用）。
+- 具体参数语义看 `ninfer-serve --help`。
 
-## 五、踩坑汇总（重点）
+## 四、坑汇总（每坑标"去看什么"）
 
-1. **制品代际不对齐** → 引擎不认/乱码。锁 commit + 认 HEAD。
-2. **发布缺件**（numeric.py / _ternary_ref.py）→ 写 shim，不改上游。
-3. **视觉** → fork 不支持图片，外部模型。
-4. **arch 守卫** → CMake 架构列表级改动，验 SASS。
-5. **ffmpeg / CUDA 版本** → 硬前置，缺则编不过。
-6. **CraneBW 合并漏文件** → 逐文件核对。
-7. **并发挤爆显存** → 小余量档并发 1。
-8. **思考区空收尾** → 已修（frontend 方案 C，commit `145bccb`）：思考区 stop 强制进正文。
-9. **Agent 思考死循环** → 贫瘠输入 + xhigh + "继续"会失忆循环；恢复会话或投喂材料，别靠思考帽。
+| 坑 | 现象 | 要看/对策 |
+|---|---|---|
+| 制品代际 | 引擎不认/乱码 | 看 `--help` 认代际 + magic 字节 |
+| 发布缺件 | 打包失败 | `landing/tools/ternary_shim.py`（写 shim 不改上游）|
+| 视觉 | fork 不支持图片 | 走外部视觉模型 |
+| arch 守卫 | 非 sm_89 `#error` | 看 `device.h` + CMake 架构列表 |
+| ffmpeg / CUDA | 编不过 | 基线 CMakeLists L59/L82 |
+| CraneBW 漏合 | 首编 error | 逐文件核对，别信"x 个文件"|
+| 并发挤爆 | `preparing CUDA graphs bad alloc` | 小余量档并发 1 |
+| 思考空收尾 | 长思考无正文 | 已修：commit `145bccb`（frontend 强制进正文）|
+| Agent 死循环 | "继续"失忆 | 恢复会话/投喂材料，别靠思考帽 |
 
-## 六、成果与授权
+## 五、关键文件索引（本仓库可直接查）
 
-- 模型 Apache-2.0（Qwen 团队），可公开分发/复现。
-- 本 fork 增量全在 git，可逐条回退。
-- **实测数据全来自本机，不是营销**。
+| 文件 | 看什么 |
+|---|---|
+| `landing/artifacts/Ternary-Bonsai-2-27B.ninfer` | 三元制品 |
+| `landing/artifacts/qwen3_8_27b.ninfer` + `.conversion.json` | 模板 + 转换报告 |
+| `landing/tools/ternary_shim.py` | 三元运行时 shim |
+| `landing/tools/ninfer-ada-ternary/` | 作者工具链 |
+| `*起服-*.bat` | 各档位现成命令 |
+| `docs/项目构建史.md`（主库）| 逐日全史 |
 
 ---
 
-**说明**：本仓库是 Bowsai-2-27B 三元部署的复现工程。原作者工作请看上游，这里是"我们怎么把它在 5080 跑起来的完整路线、做法与坑"。
+**说明**：本仓库是 Bowsai-2-27B 三元部署的复现工程；上游作者工作看上游，这里列的是"我们怎么跑起来的每一步，要去看什么资料/命令"。实测数据全来自本机，非营销。
