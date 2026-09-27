@@ -534,8 +534,9 @@ class LauncherApp:
             self.status.config(text="未选择或找不到组合", fg="#b03030")
             return
         combo = self.profiles[name]
+        valid_keys = {d[0] for d in DIMENSIONS}
         for key, val in combo.items():
-            if key not in dict(DIMENSIONS).keys():
+            if key not in valid_keys:
                 continue
             opts = next(d[2] for d in DIMENSIONS if d[0] == key)
             if val not in opts:
