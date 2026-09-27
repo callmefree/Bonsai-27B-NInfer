@@ -3,10 +3,10 @@ AIGC:
   ContentProducer: '001191110102MAD55U9H0F10002'
   ContentPropagator: '001191110102MAD55U9H0F10002'
   Label: '1'
-  ProduceID: '4d0602ee-d3e7-40a3-b509-433c10b2e934'
-  PropagateID: '4d0602ee-d3e7-40a3-b509-433c10b2e934'
-  ReservedCode1: 'dad92cf9-39df-431f-aad5-42b83229faab'
-  ReservedCode2: 'dad92cf9-39df-431f-aad5-42b83229faab'
+  ProduceID: '11c729bf-8ec2-4f94-98d0-f60bd5e271fb'
+  PropagateID: '11c729bf-8ec2-4f94-98d0-f60bd5e271fb'
+  ReservedCode1: '1f05ea11-1db5-4682-a6c2-d717c49399cc'
+  ReservedCode2: '1f05ea11-1db5-4682-a6c2-d717c49399cc'
 ---
 
 # Bowsai-NInfer — RTX 5080 三元量化复现指南
@@ -117,4 +117,4 @@ AIGC:
 
 ---
 
-**说明**：本仓库是 Bowsai-2-27B 三元部署的复现工程；上游作者工作看上游，这里列的是"我们怎么跑起来的每一步，要去看什么资料/命令"。实测数据全来自本机，非营销。
+**说明**：本仓库是 Bowsai-2-27B 三元部署的复现工程；上游作者工作看上游，这里列的是"我们怎么跑起来的每一步，要去看什么资料/命令"。
