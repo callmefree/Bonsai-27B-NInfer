@@ -56,11 +56,11 @@
 
 ### 第 6 步 · 速度标定（M6）
 - **要看**：`M6` 报告 + 三档验证脚本。
-- 5080 实测：裸 decode 68 / MTP / DFlash2 英文 104.7（中文负收益）。
+- 5080 实测演进：裸 decode 68 → MTP → DFlash2 英文 104.7（中文负收益）。**后续经用户实测大幅提升**，见第三节档位表（224K+MTP3 峰值 250、128K+DFlash7 峰值 355、S8 内核 prefill 1.85k/峰值解码 396）。
 
 ### 第 7 步 · 提速内核（M7 + 后续）
 - **要看**：`CraneBW/ninfer-ternary-bonsai-ada`（比对 `verify`）；合并方案 `CraneBW内核合并方案`；报告 `CraneBW内核合并验证报告`。
-- 结果：prefill 600→1288；后续 s8/wide_t 移植 → 冷 prefill **1.63k**。
+- 结果：prefill 600→1288；后续 s8/wide_t 移植 → **冷 prefill 最高 1.85k**（S8 内核，启动器 prefill 下拉可选）。
 - **坑**：CraneBW 声称 8 文件，漏合 `gemv.cuh`（新 kernel 未并）→ 首编 12 error。逐文件核对，别信"x 个文件"。
 
 ---
@@ -71,10 +71,12 @@
 
 | 档位 | 命令要点 | 5080 实测 |
 |---|---|---|
-| 日常 fp8 | `--kv-dtype fp8 --spec mtp --draft-tokens 2 --max-concurrency 2` | 114.3 t/s |
-| k8v4-224K | `--kv-dtype k8v4 --kv-capacity ...` | 95.7 |
-| k8v4-256K-MTP | 256K + MTP K=2 | 105.2（终极，余 ~0.6G 临界）|
+| 日常 FP8 | `--kv-dtype fp8 --spec mtp --draft-tokens 2 --max-concurrency 2` | 均值 114.3 t/s |
+| 224K MTP3 | `--max-context 229376 --kv-dtype k8v4 --spec mtp --draft-tokens 3`（MMA 预填充内核） | 峰值 250 t/s / 均值 180 t/s / prefill 1.3k tok/s |
+| 128K DFlash7 | `--max-context 131072 --kv-dtype bf16 --spec dflash2 --draft-tokens 7 --lm-head-draft` | 峰值 355 t/s / 均值 225 t/s / prefill 1.4k tok/s；日常工作 180-280 t/s |
 | DFlash2 英文 | `--spec dflash2 --draft-tokens 7 --lm-head-draft` | 139.5（中文勿用）|
+
+> **S8 内核更新后（更快）**：prefill 最高 **1.85k tok/s**，峰值解码**摸到 396 t/s**（MMA/S8 内核对比见启动器 prefill 下拉）。
 
 - 每个档位**要看对应 BAT 的完整参数**（`起服-*.bat` 就是现成样板，改路径即用）。
 - 具体参数语义看 `ninfer-serve --help`。
