@@ -531,22 +531,30 @@ class LauncherApp:
     def _load_profile(self):
         name = self.profile_cb.get()
         if not name or name not in self.profiles:
+            self.status.config(text="未选择或找不到组合", fg="#b03030")
             return
         combo = self.profiles[name]
-        valid_keys = {d[0] for d in DIMENSIONS}
-        valid_vals = {d[0]: set(d[2].keys()) for d in DIMENSIONS}
         for key, val in combo.items():
+            if key not in dict(DIMENSIONS).keys():
+                continue
+            opts = next(d[2] for d in DIMENSIONS if d[0] == key)
+            if val not in opts:
+                continue
             if key == "spec":
                 # spec 是组合键（k0/k1..k5/d1..d15），反向设置类型+K 两个下拉
                 if val == "k0":
-                    self.var_spec_type.set("无")
+                    self.var_spec_type.set("无"); self.var_spec_k.set("")
                 elif val.startswith("k"):
-                    self.var_spec_type.set("MTP")
-                    self.var_spec_k.set(val[1:])
+                    self.var_spec_type.set("MTP"); self.var_spec_k.set(val[1:])
                 elif val.startswith("d"):
-                    self.var_spec_type.set("DFlash2")
-                    self.var_spec_k.set(val[1:])
+                    self.var_spec_type.set("DFlash2"); self.var_spec_k.set(val[1:])
                 self._update_spec_k_range()
+            else:
+                # 写回对应下拉的选中值
+                self.var[key].set(opts[val][0])
+        # 重建 selection + 刷新预览
+        self._on_change()
+        self.status.config(text=f"已加载组合 '{name}'", fg="#4a6b4a")
 
 
     def _save_profile(self):
