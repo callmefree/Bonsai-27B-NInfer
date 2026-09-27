@@ -85,7 +85,7 @@
 |---|---|---|
 | 制品代际 | 引擎不认/乱码 | 看 `--help` 认代际 + magic 字节 |
 | 发布缺件 | 打包失败 | `landing/tools/ternary_shim.py`（写 shim 不改上游）|
-| 视觉 | fork 不支持图片 | 走外部视觉模型 |
+| 视觉 | 引擎已支持 `--vision`（内置视觉塔 + media），启动器有"视觉"开关 | 启动器 GUI 把视觉拨到"开启"即可（或 BAT 加 `--vision`）；默认档位关闭 |
 | arch 守卫 | 非 sm_89 `#error` | 看 `device.h` + CMake 架构列表 |
 | ffmpeg / CUDA | 编不过 | 基线 CMakeLists L59/L82 |
 | CraneBW 漏合 | 首编 error | 逐文件核对，别信"x 个文件"|
