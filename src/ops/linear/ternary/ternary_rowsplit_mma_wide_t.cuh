@@ -214,7 +214,10 @@ void ternary_wide_t_kernel(const __nv_bfloat16* __restrict__ x,
                            const std::uint8_t* __restrict__ scales,
                            __nv_bfloat16* __restrict__ out, std::int32_t rows,
                            std::int32_t k, std::int32_t tokens,
-                           std::int32_t out_row_stride) {
+                           std::int32_t out_row_stride,
+                           // A3: token tile moves to grid.y when true (one tile per CTA); when
+                           // false the old serial in-CTA walk is kept (the A/B control arm).
+                           bool token_grid) {
     __shared__ TernaryWideStorage staging;
     auto& lut      = staging.lut;
     auto& codes_sh = staging.codes;
@@ -463,7 +466,18 @@ void ternary_wide_t_kernel(const __nv_bfloat16* __restrict__ x,
     const int row_hi = row_lo + 8;
     constexpr int kSubTiles = kTernaryWideTokens / 8;
 
-    for (int tok_base = 0; tok_base < tokens; tok_base += kTernaryWideTokens) {
+    // A3: the token tile is grid.y when the switch is on (one tile per CTA); with
+    // NINFER_TERNARY_TOKEN_GRID=0 the tiles are walked serially in this CTA, which is the
+    // pre-change behaviour and the A/B control arm. The tile body below is identical either way --
+    // its accumulators are declared and zeroed inside the loop, and the weight window is re-staged
+    // from the top of K for every tile, so tiles share no state and re-partitioning them cannot
+    // reorder a single addition.
+    const int tok_tiles = token_grid ? 1 : ((tokens + kTernaryWideTokens - 1) / kTernaryWideTokens);
+    const int tok_base0 = token_grid ? static_cast<int>(blockIdx.y) * kTernaryWideTokens : 0;
+    if (tok_base0 >= tokens) { return; }
+
+    for (int tok_tile = 0; tok_tile < tok_tiles; ++tok_tile) {
+        const int tok_base = tok_base0 + tok_tile * kTernaryWideTokens;
         float acc[kSubTiles][4];
 #pragma unroll
         for (int sub = 0; sub < kSubTiles; ++sub) {

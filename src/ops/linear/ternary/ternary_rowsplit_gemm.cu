@@ -51,6 +51,17 @@ PrefillRoute prefill_route() {
     return route;
 }
 
+// A3 (sched3 CHANGE 3): token tiles are laid out on grid.y when enabled, the serial in-CTA
+// walk is kept when disabled. Default on (env unset or non-"0"); NINFER_TERNARY_TOKEN_GRID=0 is
+// the A/B control arm.
+[[nodiscard]] inline bool ternary_token_grid_enabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("NINFER_TERNARY_TOKEN_GRID");
+        return value == nullptr || std::string(value) != "0";
+    }();
+    return enabled;
+}
+
 
 // Decode (T == 1) takes the warp-per-row GEMV for PQ2_0. K is a whole number of 128-groups for
 // every width in this model, so that kernel needs no column guard.
@@ -333,11 +344,14 @@ void launch_ternary_mma_wide(const Tensor& x, const Weight& w, Tensor& out,
     if (w.padded_shape[1] != w.k || (w.k % kTernaryWideChunkK) != 0 || out_row_stride < rows) {
         throw std::invalid_argument("ternary mma_wide: needs whole-group unpadded K with wide-tile chunk");
     }
-    const unsigned grid = static_cast<unsigned>(div_up(rows, kTernaryWideRowsPerCta));
+    const bool token_grid = ternary_token_grid_enabled();
+    const dim3 grid(static_cast<unsigned>(div_up(rows, kTernaryWideRowsPerCta)),
+                    token_grid ? static_cast<unsigned>(div_up(x.ne[1], kTernaryWideTokens)) : 1u,
+                    1u);
     ternary_wide_t_kernel<false><<<grid, kTernaryWideThreads, 0, stream>>>(
         static_cast<const __nv_bfloat16*>(x.data), static_cast<const std::uint8_t*>(w.qdata),
         nullptr, static_cast<const std::uint8_t*>(w.scales),
-        static_cast<__nv_bfloat16*>(out.data), rows, w.k, x.ne[1], out_row_stride);
+        static_cast<__nv_bfloat16*>(out.data), rows, w.k, x.ne[1], out_row_stride, token_grid);
     CUDA_CHECK(cudaGetLastError());
 }
 
@@ -359,12 +373,14 @@ void launch_pq2_mma_s8(const Tensor& x, const Weight& w, Tensor& out,
 
     constexpr int kTokens = 64;
     constexpr int kWarps  = 4;
-    const unsigned grid =
-        static_cast<unsigned>(div_up(w.n, TernaryS8Storage<kTokens, kWarps>::kRowsPerCta));
+    // SCHED3 CHANGE 3: the token axis is grid.y, one CTA per 64-token tile.
+    const bool token_grid = ternary_token_grid_enabled();
+    const dim3 grid(static_cast<unsigned>(div_up(w.n, TernaryS8Storage<kTokens, kWarps>::kRowsPerCta)),
+                    token_grid ? static_cast<unsigned>(div_up(tokens, kTokens)) : 1u, 1u);
     ternary_pq2_mma_s8_kernel<kTokens, kWarps, 3><<<grid, kWarps * 32, 0, stream>>>(
         scratch.codes, scratch.scales, static_cast<const std::uint8_t*>(w.qdata),
         static_cast<const std::uint8_t*>(w.scales), static_cast<__nv_bfloat16*>(out.data), w.n,
-        w.k, tokens, out_row_stride);
+        w.k, tokens, out_row_stride, nullptr, token_grid);
     CUDA_CHECK(cudaGetLastError());
 }
 
