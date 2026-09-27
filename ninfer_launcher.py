@@ -19,6 +19,10 @@ APPS_DIR     = os.path.join(BUILD_DIR, "apps")
 ARTIFACT     = r"J:\Bonsai\landing\artifacts\Ternary-Bonsai-2-27B.ninfer"
 CONFIG_FILE  = os.path.join(r"J:\Bonsai", "ninfer_launcher_profiles.json")
 PORT_DEFAULT = 18787
+# serve_tee 必须用 python.exe（带控制台窗口）来显示日志，不能用 pythonw：
+# 本启动器 GUI 用 pythonw 运行时 sys.executable 指向 pythonw.exe，用它启动
+# serve_tee 会得到无控制台窗口，日志无法显示在 CMD 窗口（只会落盘）。
+PYTHON_EXE   = r"D:\Python311\python.exe"
 
 # ---------------------------------------------------------------
 # 维度定义：key -> {value: (显示名, 附加参数列表)}
@@ -604,8 +608,10 @@ class LauncherApp:
         ts = _time.strftime("%Y%m%d_%H%M%S")
         logfile = os.path.join(r"J:\Bonsai", "logs", f"serve_{ts}.log")
         tee = os.path.join(r"J:\Bonsai", "serve_tee.py")
-        # 用 CREATE_NEW_CONSOLE 启动 serve_tee（真实 CMD 窗口），tee 负责显示+落盘
-        subprocess.Popen([sys.executable, tee, logfile] + cmd,
+        # 用 CREATE_NEW_CONSOLE 启动 serve_tee（真实 CMD 窗口），tee 负责显示+落盘。
+        # 用 PYTHON_EXE 而非 sys.executable：GUI 以 pythonw 运行时 sys.executable 指向
+        # pythonw.exe（无控制台），会导致日志窗口空白。python.exe 才有控制台输出。
+        subprocess.Popen([PYTHON_EXE, tee, logfile] + cmd,
                          env=env, cwd=BUILD_DIR,
                          creationflags=subprocess.CREATE_NEW_CONSOLE)
         self.status.config(text="✓ 已启动（CMD 日志窗口，关闭即停）", fg="#4a6b4a")
