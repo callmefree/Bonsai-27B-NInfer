@@ -1,14 +1,3 @@
----
-AIGC:
-  ContentProducer: '001191110102MAD55U9H0F10002'
-  ContentPropagator: '001191110102MAD55U9H0F10002'
-  Label: '1'
-  ProduceID: '11c729bf-8ec2-4f94-98d0-f60bd5e271fb'
-  PropagateID: '11c729bf-8ec2-4f94-98d0-f60bd5e271fb'
-  ReservedCode1: '1f05ea11-1db5-4682-a6c2-d717c49399cc'
-  ReservedCode2: '1f05ea11-1db5-4682-a6c2-d717c49399cc'
----
-
 # Bowsai-NInfer — RTX 5080 三元量化复现指南
 
 > 本仓库在 **RTX 5080（16GB）** 跑通了 **Bowsai-2-27B 三元量化模型**（`Ternary-Bonsai-2-27B.ninfer`）。
@@ -22,7 +11,7 @@ AIGC:
 
 | 要看什么 | 在哪 |
 |---|---|
-| 完整开发史（M0–M8 逐日原始记录） | Bowsai 主库 `docs/项目构建史.md` |
+| 完整开发史（M0–M8：M0–M7 核心落地 + M8 09-22 后优化线） | Bowsai 主库 `docs/项目构建史.md` |
 | 技术论文《三元-Bonsai-27B-NInfer-移植》 | `三元-Bonsai-27B-NInfer-移植-技术论文-20260920.pdf` |
 | 作者工具链说明 docs/01–04 | `landing/tools/ninfer-ada-ternary/docs/` |
 | 各里程碑报告（M0–M6 + CraneBW + A/B） | Bowsai 主库 `docs/reports/` |
@@ -118,3 +107,5 @@ AIGC:
 ---
 
 **说明**：本仓库是 Bowsai-2-27B 三元部署的复现工程；上游作者工作看上游，这里列的是"我们怎么跑起来的每一步，要去看什么资料/命令"。
+
+> **两分支配合**：本项目 = 同一仓库两个分支一体——本分支（`engine-main`）= 引擎代码与复现索引；项目层（启动器/BAT/构建史/报告/论文/制品）在 `main` 分支，见那边根目录 `README.md`。
