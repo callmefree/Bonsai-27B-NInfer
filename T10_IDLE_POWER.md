@@ -6,7 +6,7 @@
 
 ## 机制一：P-State 常驻省电（v0.1.5+ 默认，`POWER_MODE=pstate`）
 
-原理：**不释放任何 GPU 资源**，只把 T10 的性能状态钳在低档。T10 空闲 P8 实测 **9.97–15.31 W/卡**（满载 TDP 70W）。
+原理：**不释放任何 GPU 资源**，只把 T10 的性能状态钳在低档。T10 空闲 P8 实测 **9.97–15.31 W/卡**（满载 TDP 150W）。
 
 - **底层工具 `nvidia-pstated` v1.0.9**（[sasha0552](https://github.com/sasha0552/nvidia-pstated)，GPL-3.0）：守护进程逐 GPU 检查温度/利用率，用 `libnvidia-api.so.1`（**NVAPI**，非 NVML）设置 P-state、NVML 读状态，默认 100ms 轮询。关键参数 `-psl`（低档）/`-psh`（高档）。
 - **容器化适配**：pstated 上游声明"必须在宿主层跑、不能进容器"；该项目把匹配宿主驱动的 `libnvidia-api.so.1` 通过 `PSTATE_NVAPI_LIB` 挂进容器解决，NVML 由 NVIDIA Container Toolkit 的 `utility` 注入。
