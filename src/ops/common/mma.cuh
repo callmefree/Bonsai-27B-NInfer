@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ops/common/memory.cuh"
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
 
 namespace ninfer::ops {
 
@@ -30,6 +32,34 @@ __device__ __forceinline__ void ldmatrix_x4_t(unsigned& r0, unsigned& r1, unsign
                  : "r"(addr));
 }
 
+// Forward declaration so the sm_75 mma_bf16 branch below can dispatch to mma_f16
+// (defined further down) without reordering the whole file.
+__device__ __forceinline__ void mma_f16(float& c0, float& c1, float& c2, float& c3, unsigned a0,
+                                        unsigned a1, unsigned a2, unsigned a3, unsigned b0,
+                                        unsigned b1);
+
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+// Turing (sm_75) has no bf16 tensor core. Convert the bf16 operands to fp16 and
+// dispatch to the fp16 MMA, keeping f32 accumulation. Signature-compatible with
+// the Ampere bf16 path, so every mma_bf16() call site works unchanged on sm_75.
+__device__ __forceinline__ void mma_bf16(float& c0, float& c1, float& c2, float& c3, unsigned a0,
+                                         unsigned a1, unsigned a2, unsigned a3, unsigned b0,
+                                         unsigned b1) {
+    const __half2 ha0 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&a0));
+    const __half2 ha1 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&a1));
+    const __half2 ha2 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&a2));
+    const __half2 ha3 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&a3));
+    const __half2 hb0 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&b0));
+    const __half2 hb1 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&b1));
+    const unsigned pa0 = *reinterpret_cast<const unsigned*>(&ha0);
+    const unsigned pa1 = *reinterpret_cast<const unsigned*>(&ha1);
+    const unsigned pa2 = *reinterpret_cast<const unsigned*>(&ha2);
+    const unsigned pa3 = *reinterpret_cast<const unsigned*>(&ha3);
+    const unsigned pb0 = *reinterpret_cast<const unsigned*>(&hb0);
+    const unsigned pb1 = *reinterpret_cast<const unsigned*>(&hb1);
+    mma_f16(c0, c1, c2, c3, pa0, pa1, pa2, pa3, pb0, pb1);
+}
+#else
 __device__ __forceinline__ void mma_bf16(float& c0, float& c1, float& c2, float& c3, unsigned a0,
                                          unsigned a1, unsigned a2, unsigned a3, unsigned b0,
                                          unsigned b1) {
@@ -38,6 +68,7 @@ __device__ __forceinline__ void mma_bf16(float& c0, float& c1, float& c2, float&
                  : "+f"(c0), "+f"(c1), "+f"(c2), "+f"(c3)
                  : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(b0), "r"(b1));
 }
+#endif
 
 __device__ __forceinline__ void mma_f16(float& c0, float& c1, float& c2, float& c3, unsigned a0,
                                         unsigned a1, unsigned a2, unsigned a3, unsigned b0,
