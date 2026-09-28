@@ -362,7 +362,8 @@ bool launch_bf16_prefill_mma(Bf16GdnGatingTokenVariant variant, const Tensor& x,
         // exceed the 64K per-SM register file and admit one resident CTA. Clamp against the
         // driver's true occupancy so the cooperative grid never exceeds SMs * maxBlocksPerSM
         // (larger problems fall into the chunked path below, which needs no cross-tile reduction).
-        static const std::int32_t kResidentCtasPerSm = [] {
+        static const std::int32_t kResidentCtasPerSm =
+            [tuned = kTunedResidentCtasPerSm] {
             int full_blocks       = 0;
             int predicated_blocks = 0;
             (void)cudaOccupancyMaxActiveBlocksPerMultiprocessor(
@@ -378,8 +379,8 @@ bool launch_bf16_prefill_mma(Bf16GdnGatingTokenVariant variant, const Tensor& x,
                                                                   NormTokenCapacity>,
                 Warps * 32, kSmemBytes);
             const int minimum = std::min(full_blocks, predicated_blocks);
-            return minimum > 0 ? std::min(kTunedResidentCtasPerSm, minimum)
-                               : kTunedResidentCtasPerSm;
+            return minimum > 0 ? std::min(tuned, minimum)
+                               : tuned;
         }();
         const std::int64_t resident_ctas =
             static_cast<std::int64_t>(multiprocessor_count) * kResidentCtasPerSm;
