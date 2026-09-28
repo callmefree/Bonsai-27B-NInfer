@@ -1,5 +1,11 @@
 # Bowsai-NInfer — RTX 5080 三元量化复现指南
 
+> ⚡ **进行中：Tesla T10 (sm_75 / Turing) 移植线**，分支 [`sm75-port`](https://github.com/callmefree/Bonsai-27B-NInfer/tree/sm75-port)。
+> 编译期移植**已全绿**（CUDA 13.1 交叉编译 sm_75 + cuobjdump 确认 SASS 零 cp.async，CI run 36384008002），
+> 全程 12 轮 CI 迭代、7 类架构障碍清除，详见 [`PORT_sm75_TURING.md`](PORT_sm75_TURING.md)。运行期验证待 T10 上机。
+>
+> 以下为 RTX 5080 主线（sm_89 / sm_120a）复现指南。
+
 > 本仓库在 **RTX 5080（16GB）** 跑通了 **Bowsai-2-27B 三元量化模型**（`Ternary-Bonsai-2-27B.ninfer`）。
 > 名字"4090"是上游沿用，**本 fork 实测平台是 5080**。
 > 这份 README 是**复现索引**：每一步要去看什么（文件/命令/报告/源码位置）都列出来，
@@ -105,6 +111,16 @@
 | `landing/tools/ninfer-ada-ternary/` | 作者工具链 |
 | `*起服-*.bat` | 各档位现成命令 |
 | `docs/项目构建史.md`（主库）| 逐日全史 |
+
+## 六、sm_75 / Tesla T10 移植线（分支 `sm75-port`）
+
+| 项 | 状态 |
+|---|---|
+| 编译期移植（sm_75） | ✅ 全绿：`ninfer_ops` CUDA 13.1 交叉编译通过，SASS 零 cp.async |
+| CI | ✅ `.github/workflows/sm75-compile.yml`（无 GPU 交叉编译 + SASS 静态校验 + 失败时 kept-PTX 定位） |
+| 运行期验证 | ⏳ 待 T10 上机（第 0 项：PyTorch FP16 matmul ≥40 TFLOPS 定案 Tensor Core） |
+
+改动收敛在 4 个咽喉文件：`mma.cuh`（MMA 形状拆分 + bf16→fp16 位级转换）、`memory.cuh`（cp.async 同步回退 + reduce shfl 回退）、`bf16_compat.cuh`（新建，f32→bf16 RNE shim，511 处调用）、`math.cuh`（pack_bf16x2 sm_80+ 守卫）。完整过程记录见 [`PORT_sm75_TURING.md`](PORT_sm75_TURING.md)。
 
 ---
 
