@@ -9,6 +9,9 @@
 #include "ops/common/sampling_workspace.h"
 #include "ops/common/score_id_order.cuh"
 #include "ninfer/ops/sampling.h"
+// sm_75 (Turing) compatibility shims: provides __reduce_max_sync fallback and
+// the cp.async -> syncthreads backport used by other sm_75-compiled kernels.
+#include "ops/common/memory.cuh"
 
 #include <cub/block/block_merge_sort.cuh>
 #include <cub/warp/warp_merge_sort.cuh>
