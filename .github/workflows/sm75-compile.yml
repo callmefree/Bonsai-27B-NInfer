@@ -177,6 +177,39 @@ jobs:
           fi
           echo "PASS: kTargetSmCount=56 while the sm_89 kernel family stays enabled"
 
+      - name: "Map __trap() sites in sm_75 SASS (runtime crash risk -- informational)"
+        run: |
+          set -e
+          OBJDIR=build/src/CMakeFiles/ninfer_ops.dir
+          MAP=trap-map.txt
+          : > "$MAP"
+          for o in $(find "$OBJDIR" -name '*.o'); do
+            cuobjdump -sass "$o" 2>/dev/null | awk -v obj="$o" '
+              /Function : / { fn = $3 }
+              /TRAP|BREAK|BRKPT/ { if (fn != "") { print obj " :: " fn; fn = "" } }
+            ' >> "$MAP" || true
+          done
+          n=$(grep -c '::' "$MAP" || true)
+          echo "===== __trap() sites in sm_75 SASS ====="
+          echo "kernels containing TRAP/BREAK: ${n}"
+          echo
+          for pat in "ternary.*s8|s8.*ternary" "state_passing|gated_delta" "fp8" "i8" "nvfp4"; do
+            c=$(grep -icE "$pat" "$MAP" || true)
+            echo "  [$pat] -> $c"
+          done
+          echo
+          echo "--- first 40 ---"
+          sed 's|src/CMakeFiles/ninfer_ops.dir/||' "$MAP" | head -40
+          echo
+          echo "WARNING: a trap on the ternary s8 rung or in GDN chunked state_passing"
+          echo "         means prefill crashes at runtime. See PORT_sm75_TURING.md risk 1."
+          {
+            echo; echo "===== 4. __trap() sites in sm_75 SASS (runtime crash risk) ====="
+            echo "kernels containing TRAP/BREAK: ${n}"
+            echo "--- full list ---"
+            sed 's|src/CMakeFiles/ninfer_ops.dir/||' "$MAP"
+          } >> static-health-report.txt
+
       - name: Upload static health report
         uses: actions/upload-artifact@v4
         with:
