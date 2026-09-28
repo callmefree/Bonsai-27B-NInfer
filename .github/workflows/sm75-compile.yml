@@ -81,22 +81,77 @@ jobs:
             fi
           done
 
-      - name: Verify no cp.async in sm_75 SASS
+      - name: "Verify sm_75 SASS: no Ampere+/Hopper/Blackwell-only instructions"
         run: |
           set -e
           OBJDIR=build/src/CMakeFiles/ninfer_ops.dir
+          # Instructions that cannot exist on Turing (sm_75). Any hit means an
+          # architecture guard is missing and sm_89/sm_120 code leaked into the
+          # sm_75 build — "it compiled" is NOT evidence it will run correctly.
+          #   LDGSTS / CPASYNC      : cp.async            (Ampere+ )
+          #   .E4M3 / .E5M2         : FP8 MMA             (Ada sm_89+)
+          #   CPASYNC.BULK / UBLKCP : TMA bulk async copy (Hopper+ )
+          #   WGMMA / UTCHMMA / OMMA: warpgroup MMA       (Hopper+/Blackwell)
+          #   SETMAXNREG            : register realloc    (Hopper+ )
+          PAT='LDGSTS|CPASYNC|\.E4M3|\.E5M2|UBLKCP|WGMMA|UTCHMMA|OMMA|SETMAXNREG'
           found=0
           for o in $(find "$OBJDIR" -name '*.o'); do
             arch=$(cuobjdump "$o" 2>/dev/null | grep -oE 'arch = sm_[0-9a-z]+' | head -1 || true)
-            cnt=$(cuobjdump -sass "$o" 2>/dev/null | grep -icE 'CPASYNC|cp\.async' || true)
-            echo "$o :: ${arch:-no-device-code} :: cp.async_hits=$cnt"
+            cnt=$(cuobjdump -sass "$o" 2>/dev/null | grep -icE "$PAT" || true)
+            echo "$o :: ${arch:-no-device-code} :: forbidden_hits=$cnt"
             if [ "${cnt:-0}" -gt 0 ]; then found=1; fi
           done
           if [ "$found" -ne 0 ]; then
-            echo "FAIL: cp.async SASS present in sm_75 build (Turing has no cp.async)"
+            echo "FAIL: non-Turing instructions present in the sm_75 build."
+            echo "      An __CUDA_ARCH__/macro guard is missing -> fix the guard, do not"
+            echo "      ship this binary (compiles fine != runs correctly)."
             exit 1
           fi
-          echo "PASS: ninfer_ops sm_75 SASS contains no cp.async"
+          echo "PASS: ninfer_ops sm_75 SASS is Turing-clean (no cp.async/FP8/TMA/wgmma)"
+
+      - name: "Static health report (arch / shared budget / macro exposure)"
+        run: |
+          set -e
+          REPORT="$GITHUB_WORKSPACE/static-health-report.txt"
+          BIN=build/apps/ninfer-serve
+          OBJDIR=build/src/CMakeFiles/ninfer_ops.dir
+          {
+            echo "===== 1. embedded device architecture ====="
+            cuobjdump -header "$BIN" 2>/dev/null | grep -oE 'sm_[0-9a-z]+' | sort | uniq -c \
+              || echo "(arch extraction failed)"
+            echo
+            echo "===== 2. kernel inventory + shared-memory budget ====="
+            echo "static shared wall for sm_75/sm_86/sm_89 = 48 KiB (49152 B)"
+            cuobjdump -res-usage "$BIN" > /tmp/res.txt 2>/dev/null || true
+            echo "res-usage lines: $(wc -l < /tmp/res.txt)"
+            echo "--- format sample (first 12 lines) ---"
+            head -12 /tmp/res.txt
+            echo "--- kernel count (unique mangled names) ---"
+            grep -oE '_Z[A-Za-z0-9_]+' /tmp/res.txt | sort -u | wc -l
+            echo "--- over-48KiB kernels (SHARED > 49152) ---"
+            grep -oE 'SHARED:[0-9]+' /tmp/res.txt | cut -d: -f2 \
+              | awk '$1>49152{c++} END{print "count=" c+0}'
+            echo "--- top 8 SHARED users ---"
+            grep -oE 'SHARED:[0-9]+' /tmp/res.txt | sort -t: -k2 -nr | head -8
+            echo "--- ternary kernels present? ---"
+            grep -oiE '_Z[A-Za-z0-9_]*ternary[A-Za-z0-9_]*' /tmp/res.txt | sort -u | wc -l
+            echo
+            echo "===== 3. macro exposure (KNOWN ISSUE, informational) ====="
+            echo -n "objects compiled with NINFER_SM89: "
+            grep -c 'NINFER_SM89' build/compile_commands.json 2>/dev/null || echo 0
+            echo "NOTE: CMakeLists.txt:38 matches '89|120a|75', so the sm_75 build also"
+            echo "      gets NINFER_SM89=1 -> sm_89 kernel paths + kTargetSmCount=128"
+            echo "      (Tesla T10 has 56 SM). Instruction-level guards still hold"
+            echo "      (see step 2), but scheduling choices may be wrong."
+          } 2>&1 | tee "$REPORT"
+          echo "report written: $(wc -l < "$REPORT") lines"
+
+      - name: Upload static health report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ninfer-sm75-static-report
+          path: static-health-report.txt
+          if-no-files-found: warn
 
       - name: "Sanity: linkage check (no GPU needed)"
         run: |
