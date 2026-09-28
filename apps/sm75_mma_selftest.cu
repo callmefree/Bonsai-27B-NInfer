@@ -1,9 +1,10 @@
 // Standalone sm_75 MMA bridge self-test.
 //
-// Turing has no tf32 and no int8 m16n8 tensor-core MMA. mma.cuh bridges what it can:
-//   mma_bf16()      -> fp16 MMA   (the author's bridge, used by every bf16 kernel)
-//   mma_tf32_bits() -> fp16 MMA   (added for the sm_75 port: GDN chunked prefill reaches it)
-//   mma_s8()        -> __trap()   (kept: the rung is disabled at dispatch instead)
+// Turing has no tf32 MMA and no m16n8 int8 MMA. mma.cuh bridges what it can:
+//   mma_bf16()      -> fp16 MMA      (the author's bridge, used by every bf16 kernel)
+//   mma_tf32_bits() -> fp16 MMA      (added for the sm_75 port: GDN chunked prefill reaches it)
+//   mma_s8()        -> 4x m8n8k16    (added for the sm_75 port: Turing's IMMA is real, it is
+//                                     just shaped 8x8x16 instead of 16x8x32)
 //
 // A bridge that packs the fragment registers the wrong way compiles, launches, and returns
 // plausible numbers -- and silently corrupts every prefill. SASS cannot catch it. So this probe
@@ -14,7 +15,7 @@
 // sum is exact in fp32. That removes the tolerance argument entirely -- a wrong packing shows
 // up as "value is not a reference entry", not as "error 3e-2, is that OK?".
 //
-// Four checks, each scored three ways:
+// Five checks, each scored three ways:
 //   bad        produced values that match NO reference entry  -> the decisive one. A row/k
 //              misassignment lands on a mixed product that is not any true entry.
 //   unmatched  reference entries no thread produced           -> informational; duplicates in
@@ -34,7 +35,7 @@ namespace {
 using namespace ninfer::ops;
 
 constexpr int kThreads = 32;
-constexpr int kChecks  = 4;
+constexpr int kChecks  = 5;
 
 // Reference matrices: 16x8 (k=8 checks) and 16x8 via k=16 (bf16 check).
 __device__ __forceinline__ float gen_a(int flat) {
@@ -42,6 +43,17 @@ __device__ __forceinline__ float gen_a(int flat) {
 }
 __device__ __forceinline__ float gen_b(int flat) {
     return 0.125f * static_cast<float>(flat % 7) + 0.25f;
+}
+
+// int8 operands for the mma_s8 check. Small signed values so every product and every partial
+// sum is exact in int32 and in fp32: |a| <= 6, |b| <= 3, k = 32 -> |sum| <= 576.
+__device__ __forceinline__ int gen_a8(int flat) { return (flat % 13) - 6; }
+__device__ __forceinline__ int gen_b8(int flat) { return (flat % 7) - 3; }
+
+// Four signed bytes into one fragment register, lowest k in the lowest byte.
+__device__ __forceinline__ unsigned pack_s8x4(int v0, int v1, int v2, int v3) {
+    return (static_cast<unsigned>(v0 & 0xFF)) | ((static_cast<unsigned>(v1 & 0xFF)) << 8) |
+           ((static_cast<unsigned>(v2 & 0xFF)) << 16) | ((static_cast<unsigned>(v3 & 0xFF)) << 24);
 }
 
 // bf16 is the top 16 bits of the fp32. Exact for the values above (multiples of 1/8 -> the low
@@ -68,12 +80,18 @@ __global__ void sm75_mma_selftest_kernel(float* err_out, int* bad_out, int* unma
     const int lane_t = lane & 3;    // k selector
 
     for (int check = 0; check < kChecks; ++check) {
-        const int kdim = (check == 3) ? 16 : 8;
+        const int kdim = (check == 3) ? 16 : ((check == 4) ? 32 : 8);
         for (int i = lane; i < 128; i += kThreads) {
             const int r = i / 8;
             const int c = i % 8;
             float s     = 0.0f;
-            for (int k = 0; k < kdim; ++k) { s += gen_a(r * 16 + k) * gen_b(k * 8 + c); }
+            if (check == 4) {
+                for (int k = 0; k < kdim; ++k) {
+                    s += static_cast<float>(gen_a8(r * 32 + k) * gen_b8(k * 8 + c));
+                }
+            } else {
+                for (int k = 0; k < kdim; ++k) { s += gen_a(r * 16 + k) * gen_b(k * 8 + c); }
+            }
             ref[i] = s;
         }
         for (int i = lane; i < 128; i += kThreads) { hit[i] = 0; }
@@ -101,6 +119,37 @@ __global__ void sm75_mma_selftest_kernel(float* err_out, int* bad_out, int* unma
             const unsigned rb0 = pack_bf16x2(gen_b(k0 * 8 + col), gen_b((k0 + 1) * 8 + col));
             const unsigned rb1 = pack_bf16x2(gen_b((k0 + 8) * 8 + col), gen_b((k0 + 9) * 8 + col));
             mma_bf16(c0, c1, c2, c3, ra0, ra1, ra2, ra3, rb0, rb1);
+        } else if (check == 4) {
+            // mma_s8, m16n8k32 bridged as 4x m8n8k16.
+            // Hypothesis under test: a0 = rows 0-7 k0..15, a1 = rows 8-15 k0..15,
+            // a2 = rows 0-7 k16..31, a3 = rows 8-15 k16..31; b0 = k0..15, b1 = k16..31;
+            // (c0,c1) = rows 0-7, (c2,c3) = rows 8-15, two columns each.
+            const int k0  = 4 * lane_t;
+            const int row = lane_g;
+            const int col = lane_g;
+            const unsigned ra0 =
+                pack_s8x4(gen_a8(row * 32 + k0), gen_a8(row * 32 + k0 + 1),
+                          gen_a8(row * 32 + k0 + 2), gen_a8(row * 32 + k0 + 3));
+            const unsigned ra1 =
+                pack_s8x4(gen_a8((row + 8) * 32 + k0), gen_a8((row + 8) * 32 + k0 + 1),
+                          gen_a8((row + 8) * 32 + k0 + 2), gen_a8((row + 8) * 32 + k0 + 3));
+            const unsigned ra2 =
+                pack_s8x4(gen_a8(row * 32 + k0 + 16), gen_a8(row * 32 + k0 + 17),
+                          gen_a8(row * 32 + k0 + 18), gen_a8(row * 32 + k0 + 19));
+            const unsigned ra3 =
+                pack_s8x4(gen_a8((row + 8) * 32 + k0 + 16), gen_a8((row + 8) * 32 + k0 + 17),
+                          gen_a8((row + 8) * 32 + k0 + 18), gen_a8((row + 8) * 32 + k0 + 19));
+            const unsigned rb0 = pack_s8x4(gen_b8(k0 * 8 + col), gen_b8((k0 + 1) * 8 + col),
+                                           gen_b8((k0 + 2) * 8 + col), gen_b8((k0 + 3) * 8 + col));
+            const unsigned rb1 =
+                pack_s8x4(gen_b8((k0 + 16) * 8 + col), gen_b8((k0 + 17) * 8 + col),
+                          gen_b8((k0 + 18) * 8 + col), gen_b8((k0 + 19) * 8 + col));
+            int i0 = 0, i1 = 0, i2 = 0, i3 = 0;
+            mma_s8(i0, i1, i2, i3, ra0, ra1, ra2, ra3, rb0, rb1);
+            c0 = static_cast<float>(i0);
+            c1 = static_cast<float>(i1);
+            c2 = static_cast<float>(i2);
+            c3 = static_cast<float>(i3);
         } else {
             // m16n8k8: A is (row, k) / (row+8, k) / (row, k+4) / (row+8, k+4),
             //          B is (k, col) / (k+4, col).
@@ -169,6 +218,7 @@ const char* check_name(int i) {
     case 1: return "mma_f16_k8()     packing P1 regA={a0,a2},{a1,a3}";
     case 2: return "mma_f16_k8()     packing P2 regA={a0,a1},{a2,a3}";
     case 3: return "mma_bf16()       author's sm_75 bridge (k16)";
+    case 4: return "mma_s8()         sm_75 bridge: m16n8k32 as 4x m8n8k16";
     default: return "?";
     }
 }
@@ -236,12 +286,17 @@ int main() {
     }
     std::printf("\n");
     if (failures == 0) {
-        std::printf("RESULT: all bridges bit-exact. The sm_75 tf32 bridge is safe to trust.\n");
+        std::printf("RESULT: all bridges bit-exact. The sm_75 tf32 and s8 bridges are safe to\n"
+                    "        trust, and the ternary int8 prefill rung can stay enabled.\n");
     } else {
-        std::printf("RESULT: %d check(s) failed. If exactly one of P1/P2 passes, mma.cuh is\n"
-                    "        packing the fp16 fragment the other way -- flip it and rebuild.\n"
-                    "        If mma_bf16 also fails, the k16 hypothesis in this probe is wrong;\n"
-                    "        fix the probe before drawing conclusions about mma.cuh.\n",
+        std::printf("RESULT: %d check(s) failed. Reading the failures:\n"
+                    "        - exactly one of P1/P2 passes -> mma.cuh packs the fp16 fragment\n"
+                    "          the other way; flip it and rebuild.\n"
+                    "        - mma_bf16 also fails -> the k16 hypothesis in this probe is wrong;\n"
+                    "          fix the probe before drawing conclusions about mma.cuh.\n"
+                    "        - mma_s8 fails but the fp32/bf16 checks pass -> the 4x m8n8k16\n"
+                    "          fragment split is wrong. Set NINFER_TERNARY_S8=0 so prefill falls\n"
+                    "          back to the bf16 rung, and fix the row/k split in mma.cuh.\n",
                     failures);
     }
 

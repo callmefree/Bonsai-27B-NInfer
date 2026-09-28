@@ -82,9 +82,10 @@ void ternary_dispatch(const Tensor& x, const Weight& w, Tensor& out, LinearPolic
     // illegal, because this op runs inside captured CUDA graphs. Below the threshold the scratch is
     // left empty and the launch falls through to the bf16 rungs.
     TernaryS8Scratch scratch{};
-    // On sm_75 the rung is hard-off (mma_s8 traps there), so skip its scratch as well: without
-    // this the arena would still reserve k*T + T bytes per ternary linear for a kernel that can
-    // never run, and 16 GB of T10 VRAM is the binding constraint.
+    // Allocated only when the rung will actually run: without this the arena would reserve
+    // k*T + T bytes per ternary linear for a kernel that never launches, and 16 GB of T10 VRAM
+    // is the binding constraint. (This used to be a sm_75-specific skip, back when the rung was
+    // hard-off there; it is now just the honest condition.)
     if (ternary_s8_enabled() && x.ne[1] >= kTernaryS8MinTokens) {
         const DeviceSpan codes  = workspace->alloc_bytes(ternary_s8_codes_bytes(w.k, x.ne[1]));
         const DeviceSpan scales = workspace->alloc_bytes(ternary_s8_scales_bytes(x.ne[1]));

@@ -123,10 +123,45 @@ __device__ __forceinline__ void mma_f16_f16acc(unsigned& c0, unsigned& c1, unsig
 __device__ __forceinline__ void mma_s8(int& c0, int& c1, int& c2, int& c3, unsigned a0, unsigned a1,
                                        unsigned a2, unsigned a3, unsigned b0, unsigned b1) {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
-    // Turing has no m16n8 mma shape for s8 (only m8n8k16/m32n8k16, incompatible
-    // fragment layouts). The int8 variant kernels are never dispatched on this
-    // arch; trap loudly if a caller ever reaches here.
-    __trap();
+    // Turing DOES have integer tensor cores -- just not in an m16n8 shape. ptxas accepts
+    // mma.sync.m8n8k16.row.col.s32.s8.s8.s32 at sm_75 and rejects m16n8k16 / m16n8k32 .s8
+    // with "requires .target sm_80 or higher" (measured: .github/workflows/sm75-imma-probe.yml).
+    //
+    // m16n8k32 is exactly 4x m8n8k16 -- M splits into the two 8-row halves, K into the two
+    // 16-deep halves -- so it is bridged here with four instructions and the caller sees no
+    // difference at all:
+    //
+    //   A: a0 = rows 0-7  k 0..15    a2 = rows 0-7  k 16..31
+    //      a1 = rows 8-15 k 0..15    a3 = rows 8-15 k 16..31
+    //   B: b0 = k 0..15              b1 = k 16..31
+    //   C: c0,c1 = rows 0-7          c2,c3 = rows 8-15
+    //
+    // The split is not guesswork: it is read off the callers' own ldmatrix addressing.
+    // ternary_rowsplit_mma_s8.cuh loads A with ldmatrix_x4 at a_matrix = lane >> 3,
+    // a_row = (lane & 7) + ((a_matrix & 1) << 3), a_col = (a_matrix >> 1) * 16 -- i.e. matrix0
+    // is rows 0-7 at byte 0, matrix1 rows 8-15 at byte 0, matrix2 rows 0-7 at byte 16, matrix3
+    // rows 8-15 at byte 16 -- and stores c0,c1 to row_lo / c2,c3 to row_hi. B is ldmatrix_x2
+    // with b_col = ((lane >> 3) & 1) * 16, i.e. b0 = k 0..15 and b1 = k 16..31.
+    //
+    // s32 accumulation is exact and associative, so the four-instruction sum is bit-identical
+    // to the single Ampere instruction. Still, no SASS check can prove the register split, so
+    // apps/sm75_mma_selftest.cu re-derives the products on the CUDA cores and demands equality.
+    asm volatile("mma.sync.aligned.m8n8k16.row.col.s32.s8.s8.s32 "
+                 "{%0,%1}, {%2}, {%3}, {%0,%1};\n"
+                 : "+r"(c0), "+r"(c1)
+                 : "r"(a0), "r"(b0));
+    asm volatile("mma.sync.aligned.m8n8k16.row.col.s32.s8.s8.s32 "
+                 "{%0,%1}, {%2}, {%3}, {%0,%1};\n"
+                 : "+r"(c2), "+r"(c3)
+                 : "r"(a1), "r"(b0));
+    asm volatile("mma.sync.aligned.m8n8k16.row.col.s32.s8.s8.s32 "
+                 "{%0,%1}, {%2}, {%3}, {%0,%1};\n"
+                 : "+r"(c0), "+r"(c1)
+                 : "r"(a2), "r"(b1));
+    asm volatile("mma.sync.aligned.m8n8k16.row.col.s32.s8.s8.s32 "
+                 "{%0,%1}, {%2}, {%3}, {%0,%1};\n"
+                 : "+r"(c2), "+r"(c3)
+                 : "r"(a3), "r"(b1));
 #else
     asm volatile("mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32 "
                  "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};\n"

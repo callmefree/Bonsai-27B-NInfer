@@ -22,20 +22,25 @@ namespace ninfer::ops::detail {
 // Read once, because the choice decides which kernel enters the captured CUDA graph.
 [[nodiscard]] inline bool ternary_s8_enabled() {
     static const bool enabled = [] {
-#if defined(NINFER_SM75)
-        // Turing has no m16n8k32 s8 MMA: mma_s8() expands to __trap() there (see mma.cuh), and
-        // this rung is the default prefill path for T >= 33 tokens -- i.e. every real prefill.
-        // Hard-off on sm_75: the env var cannot re-enable it, because the only thing it can
-        // produce is a device-side trap. Cost: prefill runs the bf16 wide rung instead, which
-        // the author measured at 1.20-1.30x slower than s8. Correctness beats 25% here.
-        return false;
-#else
         const char* value = std::getenv("NINFER_TERNARY_S8");
         return value == nullptr || std::string(value) != "0";
-#endif
     }();
     return enabled;
 }
+
+// Why this rung is live on sm_75 and not hard-off:
+//
+// It used to be disabled here, on the reasoning that "Turing has no s8 MMA". That reasoning was
+// wrong in an important way -- it was only ever checked against the m16n8k32 shape. ptxas accepts
+// mma.sync.m8n8k16.row.col.s32.s8.s8.s32 at sm_75, and mma_s8() now bridges m16n8k32 with four of
+// them (see mma.cuh). Turing's IMMA is real; it is just shaped 8x8x16.
+//
+// Cost of not doing this: prefill takes the bf16 wide rung instead, measured at 1.20-1.30x slower
+// than s8 by the author. Cost of doing it: a fragment split that no static check can verify, which
+// is why apps/sm75_mma_selftest.cu has to pass on the target before this rung is trusted.
+//
+// NINFER_TERNARY_S8=0 remains the A/B switch -- it is the only way to tell "the numerics differ
+// because activations are int8" apart from "the bridge is wrong", without a rebuild.
 
 // First token count at which the int8 rung beats both bf16 rungs. Measured on the real shape mix
 // (tscale_bench, 2026-09-20, quantization pass included): T=32 is a tie (43.25 vs 42.49 small_t),
