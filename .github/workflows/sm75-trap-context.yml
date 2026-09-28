@@ -5,16 +5,20 @@ name: sm75 trap context (targeted)
 # mma.cuh, where an arch guard turns an unsupported MMA into __trap(); that is dead
 # code as long as nothing dispatches int8/fp8 on Turing.
 #
-# A few reported kernels do NOT include mma.cuh at all (sampling, speculative_round),
-# which means the trap is compiler-generated and the count alone cannot clear it.
-# This workflow compiles ONLY those objects and prints the SASS around each trap so
-# the guard branch -- or the absence of one -- is visible.
+# The count is also easy to misread: Volta+ emits BREAK for independent-thread-
+# scheduling reconvergence (a divergent thread leaving a BSYNC region), which has
+# nothing to do with a crash. Only BPT.TRAP / TRAP is a real trap, so report the
+# mnemonics separately and print the SASS window around the first real one.
 #
-# Runtime cost is a few minutes: configure + three object files, no full build.
+# Runtime cost is a few minutes: configure + five object files, no full build.
+#
+# NOTE: deliberately NOT triggered by pushes to sm75-port -- it is a diagnostic tool, and
+# running it on every push doubles CI time for no information. Trigger it by hand
+# (workflow_dispatch) or push to the ci-probe branch.
 
 on:
   push:
-    branches: [sm75-port]
+    branches: [ci-probe]
   workflow_dispatch:
 
 jobs:
@@ -51,36 +55,83 @@ jobs:
             -DBUILD_TESTING=OFF \
             -DCMAKE_CUDA_FLAGS="-lineinfo --keep --keep-dir=$GITHUB_WORKSPACE/ptx_keep"
 
-      - name: Build only the unclassified TRAP objects
+      # Three objects reported as "trap-bearing" with no path to mma.cuh (suspicious),
+      # plus two controls that we KNOW carry __trap() from mma.cuh (small_t.cu = i8
+      # attention family, ternary_rowsplit_gemm.cu = the ternary s8 rung). Comparing
+      # the SASS shape of the controls against the suspects tells us whether a suspect
+      # trap is mma.cuh's unconditional trap or something else (e.g. device assert).
+      - name: Build only the objects under investigation
         run: |
           set -e
           OBJDIR=src/CMakeFiles/ninfer_ops.dir
           ninja -C build \
             "$OBJDIR/ops/launcher/sampling.cu.o" \
             "$OBJDIR/ops/launcher/speculative_round.cu.o" \
-            "$OBJDIR/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o"
+            "$OBJDIR/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o" \
+            "$OBJDIR/ops/softmax_attention/dense/causal_cache/small_t.cu.o" \
+            "$OBJDIR/ops/linear/ternary/ternary_rowsplit_gemm.cu.o"
 
-      - name: Dump SASS around every TRAP/BREAK
+      # Decisive control: build the SAME file for sm_89. mma.cuh's __trap() only exists
+      # below sm_80/sm_89, so a trap that survives on sm_89 is not an arch guard --
+      # it is device assert, abort, or something unconditional in the source.
+      - name: Build the same gdn object for sm_89 (control)
+        run: |
+          set -e
+          mkdir -p "$GITHUB_WORKSPACE/ptx_keep89"
+          cmake -G Ninja -B build89 \
+            -DCMAKE_CUDA_ARCHITECTURES=89 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DNINFER_BUILD_APPS=ON \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_CUDA_FLAGS="--keep --keep-dir=$GITHUB_WORKSPACE/ptx_keep89"
+          ninja -C build89 \
+            src/CMakeFiles/ninfer_ops.dir/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o
+          cuobjdump -sass build89/src/CMakeFiles/ninfer_ops.dir/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o \
+            > /tmp/sass89.txt 2>/dev/null || true
+          echo "=== sm_89 control ==="
+          echo -n "  BPT.TRAP : "; grep -c "BPT.TRAP" /tmp/sass89.txt || true
+
+      - name: Dump SASS around every real trap
         run: |
           set -e
           OBJDIR=build/src/CMakeFiles/ninfer_ops.dir
           for o in \
             "$OBJDIR/ops/launcher/sampling.cu.o" \
             "$OBJDIR/ops/launcher/speculative_round.cu.o" \
-            "$OBJDIR/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o"; do
+            "$OBJDIR/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o" \
+            "$OBJDIR/ops/softmax_attention/dense/causal_cache/small_t.cu.o" \
+            "$OBJDIR/ops/linear/ternary/ternary_rowsplit_gemm.cu.o"; do
             echo "################ $o"
             cuobjdump -sass "$o" > /tmp/sass.txt 2>/dev/null || true
-            # Which functions, and how many traps each.
-            awk '/Function : /{fn=$3; next} /TRAP|BREAK|BRKPT/{if (fn != "") cnt[fn]++}
-                 END {for (k in cnt) printf "%3d  %s\n", cnt[k], k}' /tmp/sass.txt | sort -rn
-            echo "--- SASS context around the first trap (12 before / 4 after) ---"
-            grep -n -m1 -E "TRAP|BREAK|BRKPT" /tmp/sass.txt | cut -d: -f1 > /tmp/ln.txt
+            echo "--- mnemonic census ---"
+            echo -n "  BPT.TRAP : "; grep -c "BPT.TRAP" /tmp/sass.txt || true
+            echo -n "  BREAK    : "; grep -cE "(^|[^.])BREAK" /tmp/sass.txt || true
+            echo -n "  BRKPT    : "; grep -c "BRKPT" /tmp/sass.txt || true
+            echo "--- functions carrying BPT.TRAP (count, name) ---"
+            awk '/Function : /{fn=$3; next} /BPT\.TRAP/{if (fn != "") cnt[fn]++}
+                 END {for (k in cnt) printf "%4d  %s\n", cnt[k], k}' /tmp/sass.txt \
+              | sort -rn | head -6
+            echo "--- SASS context around the first BPT.TRAP (30 before / 4 after) ---"
+            grep -n -m1 "BPT.TRAP" /tmp/sass.txt | cut -d: -f1 > /tmp/ln.txt
             if [ -s /tmp/ln.txt ]; then
               L=$(cat /tmp/ln.txt)
-              S=$((L > 12 ? L - 12 : 1))
+              S=$((L > 30 ? L - 30 : 1))
               sed -n "${S},$((L + 4))p" /tmp/sass.txt
             else
-              echo "(no TRAP/BREAK in this object)"
+              echo "(no BPT.TRAP in this object)"
+            fi
+            # PTX is the other way to reach the source construct: mma.cuh's __trap() is a bare
+            # 'trap;' in PTX, while device assert/abort show a call to __assertfail nearby.
+            echo "--- PTX around trap; (kept PTX) ---"
+            P=$(find "$GITHUB_WORKSPACE/ptx_keep" -name "$(basename ${o%.o}).ptx" 2>/dev/null | head -1)
+            if [ -z "$P" ]; then
+              P=$(find "$GITHUB_WORKSPACE/ptx_keep" -name "*$(basename ${o%.o})*.ptx" 2>/dev/null | head -1)
+            fi
+            if [ -n "$P" ]; then
+              echo "  ptx: $P"
+              grep -n -m3 -B6 -A3 "trap;" "$P" || echo "  (no trap; in PTX)"
+            else
+              echo "  (no kept PTX found for $(basename ${o%.o}))"
             fi
             echo
           done

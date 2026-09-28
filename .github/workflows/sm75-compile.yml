@@ -60,8 +60,8 @@ jobs:
       - name: Build ninfer_ops (sm_75)
         run: cmake --build build --target ninfer_ops -j 2
 
-      - name: Build ninfer-serve + ninfer (sm_75, full server)
-        run: cmake --build build --target ninfer-serve ninfer -j 2
+      - name: Build ninfer-serve + ninfer + perplexity (sm_75, full server)
+        run: cmake --build build --target ninfer-serve ninfer ninfer-perplexity -j 2
 
       # Compiles the Turing MMA bridge probe. It cannot run here (no GPU on the runner), but
       # building it keeps the probe from rotting and proves the fp16 bridge compiles.
@@ -229,13 +229,14 @@ jobs:
           echo "--- dynamic deps ---"
           (ldd build/apps/ninfer-serve || true) | grep -iE 'cudart|cuda|not found' || true
 
-      - name: Upload ninfer-serve + ninfer binaries (sm_75)
+      - name: Upload ninfer-serve + ninfer + perplexity binaries (sm_75)
         uses: actions/upload-artifact@v4
         with:
           name: ninfer-sm75-server
           path: |
             build/apps/ninfer-serve
             build/apps/ninfer
+            build/apps/ninfer-perplexity
           if-no-files-found: error
 
       # Run this on the T10 before the first real prefill: it is the only check that can prove
