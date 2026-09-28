@@ -43,6 +43,10 @@ jobs:
 
       - name: Configure (sm_75 only)
         run: |
+          # --keep-dir must exist BEFORE cmake runs: nvcc writes kept intermediates
+          # even during the compiler-identification try-compile, and fails if the
+          # directory is missing.
+          mkdir -p "$GITHUB_WORKSPACE/ptx_keep"
           cmake -G Ninja -B build \
             -DCMAKE_CUDA_ARCHITECTURES=75 \
             -DCMAKE_BUILD_TYPE=Release \
