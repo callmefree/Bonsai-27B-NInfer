@@ -100,12 +100,10 @@ jobs:
 
       - name: "Sanity: linkage check (no GPU needed)"
         run: |
-          echo "--- ninfer-serve ---"
-          build/apps/ninfer-serve --version 2>&1 | head -3 || echo "(--version unsupported, continuing)"
-          echo "--- ninfer ---"
-          build/apps/ninfer --version 2>&1 | head -3 || true
-          file build/apps/ninfer-serve build/apps/ninfer
-          ldd build/apps/ninfer-serve | grep -iE 'cudart|cuda|not found' || true
+          echo "--- binaries exist ---"
+          ls -la build/apps/ninfer-serve build/apps/ninfer
+          echo "--- dynamic deps ---"
+          (ldd build/apps/ninfer-serve || true) | grep -iE 'cudart|cuda|not found' || true
 
       - name: Upload ninfer-serve + ninfer binaries (sm_75)
         uses: actions/upload-artifact@v4
