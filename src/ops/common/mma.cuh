@@ -45,12 +45,12 @@ __device__ __forceinline__ void mma_f16(float& c0, float& c1, float& c2, float& 
 __device__ __forceinline__ void mma_bf16(float& c0, float& c1, float& c2, float& c3, unsigned a0,
                                          unsigned a1, unsigned a2, unsigned a3, unsigned b0,
                                          unsigned b1) {
-    const __half2 ha0 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&a0));
-    const __half2 ha1 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&a1));
-    const __half2 ha2 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&a2));
-    const __half2 ha3 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&a3));
-    const __half2 hb0 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&b0));
-    const __half2 hb1 = __bfloat162half2(*reinterpret_cast<const __nv_bfloat162*>(&b1));
+    const __half2 ha0 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&a0));
+    const __half2 ha1 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&a1));
+    const __half2 ha2 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&a2));
+    const __half2 ha3 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&a3));
+    const __half2 hb0 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&b0));
+    const __half2 hb1 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&b1));
     const unsigned pa0 = *reinterpret_cast<const unsigned*>(&ha0);
     const unsigned pa1 = *reinterpret_cast<const unsigned*>(&ha1);
     const unsigned pa2 = *reinterpret_cast<const unsigned*>(&ha2);
