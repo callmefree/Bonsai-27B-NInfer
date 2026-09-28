@@ -34,6 +34,7 @@ jobs:
             git cmake ninja-build pkg-config \
             gcc-13 g++-13 \
             libavformat-dev libavcodec-dev libavutil-dev libswscale-dev \
+            libcurl4-openssl-dev \
             libssl-dev zlib1g-dev
           # Sanity: confirm toolchain versions
           nvcc --version | head -3
