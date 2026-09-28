@@ -123,16 +123,10 @@ __device__ __forceinline__ void mma_f16_f16acc(unsigned& c0, unsigned& c1, unsig
 __device__ __forceinline__ void mma_s8(int& c0, int& c1, int& c2, int& c3, unsigned a0, unsigned a1,
                                        unsigned a2, unsigned a3, unsigned b0, unsigned b1) {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
-    // sm_75 has the s8 m16n8k16 shape but not k32: split k32 into two k16 MMAs.
-    // (a0,a1,b0) cover k0-15, (a2,a3,b1) cover k16-31; accumulate both.
-    asm volatile("mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
-                 "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%0,%1,%2,%3};\n"
-                 : "+r"(c0), "+r"(c1), "+r"(c2), "+r"(c3)
-                 : "r"(a0), "r"(a1), "r"(b0));
-    asm volatile("mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
-                 "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%0,%1,%2,%3};\n"
-                 : "+r"(c0), "+r"(c1), "+r"(c2), "+r"(c3)
-                 : "r"(a2), "r"(a3), "r"(b1));
+    // Turing has no m16n8 mma shape for s8 (only m8n8k16/m32n8k16, incompatible
+    // fragment layouts). The int8 variant kernels are never dispatched on this
+    // arch; trap loudly if a caller ever reaches here.
+    __trap();
 #else
     asm volatile("mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32 "
                  "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};\n"
@@ -141,6 +135,7 @@ __device__ __forceinline__ void mma_s8(int& c0, int& c1, int& c2, int& c3, unsig
 #endif
 }
 
+#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 890
 __device__ __forceinline__ void mma_fp8_e4m3(float& c0, float& c1, float& c2, float& c3,
                                              unsigned a0, unsigned a1, unsigned a2, unsigned a3,
                                              unsigned b0, unsigned b1) {
@@ -148,7 +143,7 @@ __device__ __forceinline__ void mma_fp8_e4m3(float& c0, float& c1, float& c2, fl
     // SM120 (Blackwell): the unified f8f6f4 kind covers e4m3 x e4m3.
     asm volatile("mma.sync.aligned.kind::f8f6f4.m16n8k32.row.col.f32.e4m3.e4m3.f32 "
 #else
-    // sm_89 (Ada) and earlier: FP8 mma.sync carries no .kind modifier (PTX ISA 7.8+);
+    // sm_89 (Ada): FP8 mma.sync carries no .kind modifier (PTX ISA 7.8+);
     // identical m16n8k32 fragment layout (A = 4 x .b32, B = 2 x .b32, C = 4 x .f32).
     asm volatile("mma.sync.aligned.m16n8k32.row.col.f32.e4m3.e4m3.f32 "
 #endif
@@ -156,7 +151,17 @@ __device__ __forceinline__ void mma_fp8_e4m3(float& c0, float& c1, float& c2, fl
                  : "+f"(c0), "+f"(c1), "+f"(c2), "+f"(c3)
                  : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(b0), "r"(b1));
 }
+#else
+__device__ __forceinline__ void mma_fp8_e4m3(float& c0, float& c1, float& c2, float& c3,
+                                             unsigned a0, unsigned a1, unsigned a2, unsigned a3,
+                                             unsigned b0, unsigned b1) {
+    // FP8 MMA requires sm_89+; the fp8 variant kernels are never dispatched on
+    // this arch (bf16/w8/ternary paths cover them). Trap loudly if reached.
+    __trap();
+}
+#endif
 
+#if !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 800
 __device__ __forceinline__ void mma_tf32_bits(float& c0, float& c1, float& c2, float& c3,
                                               unsigned a0, unsigned a1, unsigned a2, unsigned a3,
                                               unsigned b0, unsigned b1) {
@@ -165,6 +170,14 @@ __device__ __forceinline__ void mma_tf32_bits(float& c0, float& c1, float& c2, f
                  : "+f"(c0), "+f"(c1), "+f"(c2), "+f"(c3)
                  : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(b0), "r"(b1));
 }
+#else
+__device__ __forceinline__ void mma_tf32_bits(float& c0, float& c1, float& c2, float& c3,
+                                              unsigned a0, unsigned a1, unsigned a2, unsigned a3,
+                                              unsigned b0, unsigned b1) {
+    // tf32 MMA requires sm_80+; never dispatched on Turing. Trap loudly.
+    __trap();
+}
+#endif
 
 __device__ __forceinline__ void mma_tf32(float& c0, float& c1, float& c2, float& c3, float a0,
                                          float a1, float a2, float a3, float b0, float b1) {
