@@ -720,8 +720,9 @@ void validate_target_options(DeviceContext& device, const EngineOptions& options
         }
         break;
     }
-    if (device.compute_capability() != 120 && device.compute_capability() != 89) {
-        throw std::invalid_argument("Qwen3.6 family runtime requires compute capability 12.0 or 8.9");
+    if (device.compute_capability() != 120 && device.compute_capability() != 89 &&
+        device.compute_capability() != 75) {
+        throw std::invalid_argument("Qwen3.6 family runtime requires compute capability 12.0, 8.9 or 7.5");
     }
 }
 
