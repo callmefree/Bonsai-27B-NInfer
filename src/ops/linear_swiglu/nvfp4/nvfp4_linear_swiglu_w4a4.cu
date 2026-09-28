@@ -1,4 +1,5 @@
 #include "ops/linear_swiglu/nvfp4/nvfp4_linear_swiglu_plan.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/common/math.cuh"
@@ -47,7 +48,7 @@ struct Nvfp4SwiGluOutput {
         const float2 gate_values = __bfloat1622float2(gate.values);
         const float2 up_values   = __bfloat1622float2(up.values);
         Nvfp4SwiGluBf16Pair result;
-        result.values = __floats2bfloat162_rn(silu(gate_values.x) * up_values.x,
+        result.values = ninfer_f32x2_to_bf16x2_rn(silu(gate_values.x) * up_values.x,
                                               silu(gate_values.y) * up_values.y);
         return result.bits;
     }

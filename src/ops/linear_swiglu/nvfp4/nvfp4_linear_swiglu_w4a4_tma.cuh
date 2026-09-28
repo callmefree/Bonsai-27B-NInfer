@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/common/mma.cuh"
 #include "ops/linear/nvfp4/nvfp4_w4a4_tma.cuh"
@@ -250,9 +251,9 @@ __global__ __launch_bounds__(
                 shared_output + token1 * kOutputStride + pair_row);
             const auto& gate = accumulators[mma_m][mma_n];
             const auto& up   = accumulators[mma_m][mma_n + kGateMmaFragments];
-            *destination0    = __floats2bfloat162_rn(silu(gate[0] * alpha) * (up[0] * alpha),
+            *destination0    = ninfer_f32x2_to_bf16x2_rn(silu(gate[0] * alpha) * (up[0] * alpha),
                                                      silu(gate[1] * alpha) * (up[1] * alpha));
-            *destination1    = __floats2bfloat162_rn(silu(gate[2] * alpha) * (up[2] * alpha),
+            *destination1    = ninfer_f32x2_to_bf16x2_rn(silu(gate[2] * alpha) * (up[2] * alpha),
                                                      silu(gate[3] * alpha) * (up[3] * alpha));
         }
     }

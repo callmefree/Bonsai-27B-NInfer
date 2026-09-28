@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/warp.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -37,9 +38,9 @@ __device__ __forceinline__ RmsnormRopeD128Pair rmsnorm_rope_d128_head(
     const float sine0         = sin_cache[rotary_pair];
     const float sine1         = sin_cache[rotary_pair + 1];
     return {
-        __floats2bfloat162_rn(normalized0_x * cosine0 - normalized1_x * sine0,
+        ninfer_f32x2_to_bf16x2_rn(normalized0_x * cosine0 - normalized1_x * sine0,
                               normalized0_y * cosine1 - normalized1_y * sine1),
-        __floats2bfloat162_rn(normalized1_x * cosine0 + normalized0_x * sine0,
+        ninfer_f32x2_to_bf16x2_rn(normalized1_x * cosine0 + normalized0_x * sine0,
                               normalized1_y * cosine1 + normalized0_y * sine1),
     };
 }

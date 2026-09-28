@@ -6,6 +6,7 @@
 // rotary coefficients across heads.
 
 #include "ops/common/dflash_rope.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -78,9 +79,9 @@ __device__ __forceinline__ void apply_rope_head(__nv_bfloat16* data, std::int64_
     auto* data2         = reinterpret_cast<__nv_bfloat162*>(data + base);
     const float2 first  = __bfloat1622float2(data2[lane]);
     const float2 second = __bfloat1622float2(data2[lane + kHalfPair]);
-    data2[lane] = __floats2bfloat162_rn(first.x * c0 - second.x * s0, first.y * c1 - second.y * s1);
+    data2[lane] = ninfer_f32x2_to_bf16x2_rn(first.x * c0 - second.x * s0, first.y * c1 - second.y * s1);
     data2[lane + kHalfPair] =
-        __floats2bfloat162_rn(second.x * c0 + first.x * s0, second.y * c1 + first.y * s1);
+        ninfer_f32x2_to_bf16x2_rn(second.x * c0 + first.x * s0, second.y * c1 + first.y * s1);
 }
 
 template <RopeKernelMode Mode, int QHeads, int KHeads>

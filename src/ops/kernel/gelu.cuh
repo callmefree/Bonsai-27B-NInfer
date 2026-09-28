@@ -5,6 +5,7 @@
 // BF16x8/BF16x2/scalar storage routes but remain separate compile-time math.
 
 #include "ops/common/bf16_vector.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 
 #include <cuda_bf16.h>
@@ -28,7 +29,7 @@ __device__ __forceinline__ float gelu_one(float value) {
 
 template <bool TanhApprox>
 __device__ __forceinline__ __nv_bfloat162 gelu_pair(__nv_bfloat162 input) {
-    return __floats2bfloat162_rn(gelu_one<TanhApprox>(__low2float(input)),
+    return ninfer_f32x2_to_bf16x2_rn(gelu_one<TanhApprox>(__low2float(input)),
                                  gelu_one<TanhApprox>(__high2float(input)));
 }
 

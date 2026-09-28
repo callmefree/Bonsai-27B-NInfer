@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ops/common/math.h"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/linear/ternary/ternary_rowsplit_storage.cuh"
 
 // ninfer::ops - embedding kernels. Dense copies BF16 rows; quantized variants decode only the
@@ -53,7 +54,7 @@ __launch_bounds__(Threads) __global__
             values.__x           = static_cast<std::uint16_t>(word >> (pair * 16));
             const float2 decoded = static_cast<float2>(values);
             reinterpret_cast<__nv_bfloat162*>(output_column + offset + pair * 2)[0] =
-                __floats2bfloat162_rn(decoded.x * scale, decoded.y * scale);
+                ninfer_f32x2_to_bf16x2_rn(decoded.x * scale, decoded.y * scale);
         }
     }
 }
@@ -184,7 +185,7 @@ __launch_bounds__(Threads) __global__
         for (int pair = 0; pair < 2; ++pair) {
             const auto q0    = static_cast<std::int8_t>((word >> (pair * 16)) & 255u);
             const auto q1    = static_cast<std::int8_t>((word >> (pair * 16 + 8)) & 255u);
-            const auto value = __floats2bfloat162_rn(static_cast<float>(q0) * scale,
+            const auto value = ninfer_f32x2_to_bf16x2_rn(static_cast<float>(q0) * scale,
                                                      static_cast<float>(q1) * scale);
             if constexpr (PairStore)
                 reinterpret_cast<__nv_bfloat162*>(output + d)[pair] = value;
@@ -246,7 +247,7 @@ __launch_bounds__(256) __global__
             const int shift = pair * 16;
             const auto q0   = static_cast<std::int8_t>((word >> shift) & 0xffu);
             const auto q1   = static_cast<std::int8_t>((word >> (shift + 8)) & 0xffu);
-            out_pairs[word_index * 2 + pair] = __floats2bfloat162_rn(
+            out_pairs[word_index * 2 + pair] = ninfer_f32x2_to_bf16x2_rn(
                 static_cast<float>(q0) * scale, static_cast<float>(q1) * scale);
         }
     }

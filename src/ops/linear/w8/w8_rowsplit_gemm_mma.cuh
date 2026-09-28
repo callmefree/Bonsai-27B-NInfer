@@ -9,6 +9,7 @@
 // m16n8k16 BF16 MMA with FP32 accumulation.
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/math.cuh"
 #include "ops/linear/w8/w8_rowsplit_output.cuh"
 
@@ -205,7 +206,7 @@ __global__ __launch_bounds__(Cfg::THREADS, Cfg::MIN_BLOCKS) void w8_rowsplit_gem
                 const unsigned word = (pair < 2 ? packed.x : packed.y) >> ((pair & 1) * 16);
                 const int q0        = static_cast<int>(static_cast<std::int8_t>(word & 0xffu));
                 const int q1 = static_cast<int>(static_cast<std::int8_t>((word >> 8) & 0xffu));
-                decoded.pair[pair] = __floats2bfloat162_rn(static_cast<float>(q0) * scale,
+                decoded.pair[pair] = ninfer_f32x2_to_bf16x2_rn(static_cast<float>(q0) * scale,
                                                            static_cast<float>(q1) * scale);
             }
             store_vec(&As[row * BK + w8g32_swz64(row, col)], decoded.raw);
@@ -430,7 +431,7 @@ __global__ __launch_bounds__(Cfg::THREADS, Cfg::MIN_BLOCKS) void w8_rowsplit_gem
                 residual.raw = load_vec<uint4>(output_tile.at(row, col));
 #pragma unroll
                 for (int pair = 0; pair < 4; ++pair) {
-                    residual.pair[pair] = __floats2bfloat162_rn(
+                    residual.pair[pair] = ninfer_f32x2_to_bf16x2_rn(
                         __low2float(residual.pair[pair]) + __low2float(projected.pair[pair]),
                         __high2float(residual.pair[pair]) + __high2float(projected.pair[pair]));
                 }
@@ -443,7 +444,7 @@ __global__ __launch_bounds__(Cfg::THREADS, Cfg::MIN_BLOCKS) void w8_rowsplit_gem
                     residual.raw = load_vec<uint4>(output_tile.at(row, col));
 #pragma unroll
                     for (int pair = 0; pair < 4; ++pair) {
-                        residual.pair[pair] = __floats2bfloat162_rn(
+                        residual.pair[pair] = ninfer_f32x2_to_bf16x2_rn(
                             __low2float(residual.pair[pair]) + __low2float(projected.pair[pair]),
                             __high2float(residual.pair[pair]) + __high2float(projected.pair[pair]));
                     }

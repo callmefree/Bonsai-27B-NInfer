@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
@@ -64,7 +65,7 @@ struct Q6MmaDecodeAtom {
                                            static_cast<int>(((high >> (shift + 2)) & 3u) << 4)) ^
                                           0x20) -
                                          0x20;
-            const __nv_bfloat162 value = __floats2bfloat162_rn(static_cast<float>(q0) * scale,
+            const __nv_bfloat162 value = ninfer_f32x2_to_bf16x2_rn(static_cast<float>(q0) * scale,
                                                                static_cast<float>(q1) * scale);
             out[i]                     = *reinterpret_cast<const unsigned*>(&value);
         }
@@ -87,7 +88,7 @@ struct Q6MmaDecodeAtom {
         const int q1 =
             ((static_cast<int>(packed >> 4) | (((high_byte >> (shift + 2)) & 3) << 4)) ^ 0x20) -
             0x20;
-        return __floats2bfloat162_rn(static_cast<float>(q0) * scale,
+        return ninfer_f32x2_to_bf16x2_rn(static_cast<float>(q0) * scale,
                                      static_cast<float>(q1) * scale);
     }
 };

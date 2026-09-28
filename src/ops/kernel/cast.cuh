@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_bf16.h>
+#include "ops/common/bf16_compat.cuh"
 
 #include <cstdint>
 
@@ -17,8 +18,8 @@ __global__ void cast_fp32_to_bf16_x4_kernel(const float4* source, Bf16x4* destin
     const std::int64_t stride = static_cast<std::int64_t>(gridDim.x) * blockDim.x;
     for (std::int64_t i = start; i < vectors; i += stride) {
         const float4 value = source[i];
-        destination[i]     = {__floats2bfloat162_rn(value.x, value.y),
-                              __floats2bfloat162_rn(value.z, value.w)};
+        destination[i]     = {ninfer_f32x2_to_bf16x2_rn(value.x, value.y),
+                              ninfer_f32x2_to_bf16x2_rn(value.z, value.w)};
     }
 }
 
@@ -28,7 +29,7 @@ __global__ void cast_fp32_to_bf16_x2_kernel(const float2* source, __nv_bfloat162
     const std::int64_t stride = static_cast<std::int64_t>(gridDim.x) * blockDim.x;
     for (std::int64_t i = start; i < pairs; i += stride) {
         const float2 value = source[i];
-        destination[i]     = __floats2bfloat162_rn(value.x, value.y);
+        destination[i]     = ninfer_f32x2_to_bf16x2_rn(value.x, value.y);
     }
 }
 

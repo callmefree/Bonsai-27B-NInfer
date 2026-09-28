@@ -4,6 +4,7 @@
 // shared memory and contracts it against independent K and V weight tiles.
 
 #include "ops/linear/w8/w8_rowsplit_gemm_mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 namespace ninfer::ops::detail {
 
@@ -152,7 +153,7 @@ __launch_bounds__((TileCols / 16) * 32, kW8PairMmaMinBlocks<TileCols>) void w8_p
                     *reinterpret_cast<const std::uint16_t*>(&Cr[p][row * BK + col]);
                 const int q0 = static_cast<int>(static_cast<std::int8_t>(packed & 0xffu));
                 const int q1 = static_cast<int>(static_cast<std::int8_t>(packed >> 8));
-                const __nv_bfloat162 values = __floats2bfloat162_rn(static_cast<float>(q0) * scale,
+                const __nv_bfloat162 values = ninfer_f32x2_to_bf16x2_rn(static_cast<float>(q0) * scale,
                                                                     static_cast<float>(q1) * scale);
                 store_vec(&As[row * BK + w8g32_swz64(row, col)], values);
             }

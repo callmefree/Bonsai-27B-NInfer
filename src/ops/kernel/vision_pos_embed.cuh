@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_bf16.h>
+#include "ops/common/bf16_compat.cuh"
 
 #include <cstdint>
 
@@ -41,7 +42,7 @@ __global__ void vision_pos_embed_add_d1152_warp_kernel(const __nv_bfloat162* tab
         }
         const __nv_bfloat162 residual = x[x_base + pair];
         x[x_base + pair] =
-            __floats2bfloat162_rn(__low2float(residual) + lo, __high2float(residual) + hi);
+            ninfer_f32x2_to_bf16x2_rn(__low2float(residual) + lo, __high2float(residual) + hi);
     }
 }
 
@@ -76,7 +77,7 @@ __launch_bounds__(Block) __global__
         }
         const __nv_bfloat162 residual = x[x_base + pair];
         x[x_base + pair] =
-            __floats2bfloat162_rn(__low2float(residual) + lo, __high2float(residual) + hi);
+            ninfer_f32x2_to_bf16x2_rn(__low2float(residual) + lo, __high2float(residual) + hi);
     }
 }
 

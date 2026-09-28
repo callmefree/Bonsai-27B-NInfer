@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/linear/nvfp4/nvfp4_codec.cuh"
 #include "ops/linear/nvfp4/nvfp4_output.cuh"
@@ -357,8 +358,8 @@ __launch_bounds__(Schedule::kThreads, Schedule::kMinBlocksPerSm) void nvfp4_w4a4
                 value10 = epilogue.apply(parent_row0, token1, value10);
                 value11 = epilogue.apply(parent_row1, token1, value11);
             }
-            *destination0 = __floats2bfloat162_rn(value00, value01);
-            *destination1 = __floats2bfloat162_rn(value10, value11);
+            *destination0 = ninfer_f32x2_to_bf16x2_rn(value00, value01);
+            *destination1 = ninfer_f32x2_to_bf16x2_rn(value10, value11);
         }
     }
     __syncthreads();

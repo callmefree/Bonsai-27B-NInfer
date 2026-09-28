@@ -6,6 +6,7 @@
 // smaller alignments and odd tails. Sigmoid remains FP32 expf, not a fit.
 
 #include "ops/common/bf16_vector.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/math.cuh"
 #include "ops/common/memory.cuh"
 
@@ -21,7 +22,7 @@ __device__ __forceinline__ __nv_bfloat162 sigmoid_gate_mul_pair(__nv_bfloat162 g
                                                                 __nv_bfloat162 x) {
     const float r0 = __low2float(x) * sigmoid(__low2float(gate));
     const float r1 = __high2float(x) * sigmoid(__high2float(gate));
-    return __floats2bfloat162_rn(r0, r1);
+    return ninfer_f32x2_to_bf16x2_rn(r0, r1);
 }
 
 __global__ void sigmoid_gate_mul_scalar_kernel(const __nv_bfloat16* gate, __nv_bfloat16* x,

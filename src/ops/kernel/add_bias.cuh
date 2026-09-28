@@ -6,6 +6,7 @@
 // BF16x2 stream, and scalar indexing covers odd/unaligned storage.
 
 #include "ops/common/bf16_vector.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 
 #include <cuda_bf16.h>
@@ -17,7 +18,7 @@ namespace ninfer::ops {
 inline constexpr int kAddBiasPairsPerThread = 4;
 
 __device__ __forceinline__ __nv_bfloat162 add_bias_pair(__nv_bfloat162 value, __nv_bfloat162 bias) {
-    return __floats2bfloat162_rn(__low2float(value) + __low2float(bias),
+    return ninfer_f32x2_to_bf16x2_rn(__low2float(value) + __low2float(bias),
                                  __high2float(value) + __high2float(bias));
 }
 

@@ -15,6 +15,7 @@
 // statically compiled boundary variant outside the kernel.
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/bf16_vector.cuh"
 #include "ops/linear/q5/q5_rowsplit_storage.cuh"
 
@@ -451,7 +452,7 @@ void q5_rowsplit_gemm_mma_kernel(
 #pragma unroll
                 for (int pair = 0; pair < 4; ++pair) {
                     residual_values.pack.pair[pair] =
-                        __floats2bfloat162_rn(__low2float(residual_values.pack.pair[pair]) +
+                        ninfer_f32x2_to_bf16x2_rn(__low2float(residual_values.pack.pair[pair]) +
                                                   __low2float(projected.pack.pair[pair]),
                                               __high2float(residual_values.pack.pair[pair]) +
                                                   __high2float(projected.pack.pair[pair]));
@@ -467,7 +468,7 @@ void q5_rowsplit_gemm_mma_kernel(
 #pragma unroll
                     for (int pair = 0; pair < 4; ++pair) {
                         residual_values.pack.pair[pair] =
-                            __floats2bfloat162_rn(__low2float(residual_values.pack.pair[pair]) +
+                            ninfer_f32x2_to_bf16x2_rn(__low2float(residual_values.pack.pair[pair]) +
                                                       __low2float(projected.pack.pair[pair]),
                                                   __high2float(residual_values.pack.pair[pair]) +
                                                       __high2float(projected.pack.pair[pair]));

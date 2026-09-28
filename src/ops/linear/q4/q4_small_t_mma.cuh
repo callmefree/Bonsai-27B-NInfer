@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 
 #include <cuda_bf16.h>
@@ -52,7 +53,7 @@ __device__ __forceinline__ unsigned q4_small_t_bf16_pair(std::uint8_t packed) {
     const int q0 = (static_cast<int>(packed & 0x0fu) ^ 0x08) - 0x08;
     const int q1 = (static_cast<int>(packed >> 4) ^ 0x08) - 0x08;
     Q4SmallTBf16PairBits result;
-    result.pair = __floats2bfloat162_rn(static_cast<float>(q0), static_cast<float>(q1));
+    result.pair = ninfer_f32x2_to_bf16x2_rn(static_cast<float>(q0), static_cast<float>(q1));
     return result.bits;
 }
 

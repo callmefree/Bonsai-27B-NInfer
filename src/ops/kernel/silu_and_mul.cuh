@@ -6,6 +6,7 @@
 // docs/op-development.md §6 (no math approximation).
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -18,7 +19,7 @@ inline constexpr int kSiluAndMulPairsPerThread = 4;
 __device__ __forceinline__ __nv_bfloat162 silu_mul_pair(__nv_bfloat162 g, __nv_bfloat162 u) {
     const float r0 = silu(__low2float(g)) * __low2float(u);
     const float r1 = silu(__high2float(g)) * __high2float(u);
-    return __floats2bfloat162_rn(r0, r1);
+    return ninfer_f32x2_to_bf16x2_rn(r0, r1);
 }
 
 __global__ void silu_and_mul_scalar_kernel(const __nv_bfloat16* gate, const __nv_bfloat16* up,

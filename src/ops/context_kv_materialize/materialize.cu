@@ -1,4 +1,5 @@
 #include "ops/context_kv_materialize/launch.h"
+#include "ops/common/bf16_compat.cuh"
 #include "core/device.h"
 #include "ops/common/memory.cuh"
 #include "ops/common/mma.cuh"
@@ -51,8 +52,8 @@ __device__ __forceinline__ void store_key_head(const float* input, DeviceLayerVi
     const auto dst = 128LL * ((positions[column] & 2047) + (long long)layer.padded_capacity *
                                                                (head + 8 * slots[column / width]));
     auto* out      = reinterpret_cast<__nv_bfloat162*>(layer.cache_k + dst);
-    out[lane]      = __floats2bfloat162_rn(x0 * cos0 - y0 * sin0, x1 * cos1 - y1 * sin1);
-    out[lane + 32] = __floats2bfloat162_rn(y0 * cos0 + x0 * sin0, y1 * cos1 + x1 * sin1);
+    out[lane]      = ninfer_f32x2_to_bf16x2_rn(x0 * cos0 - y0 * sin0, x1 * cos1 - y1 * sin1);
+    out[lane + 32] = ninfer_f32x2_to_bf16x2_rn(y0 * cos0 + x0 * sin0, y1 * cos1 + x1 * sin1);
 }
 
 union alignas(16) Bf16x8 {
@@ -161,7 +162,7 @@ __global__ __launch_bounds__(Rows / 16 * ColumnWarps * 32, 1) void context_kv_mm
                     const int q0        = static_cast<int>(static_cast<std::int8_t>(word & 0xffu));
                     const int q1 = static_cast<int>(static_cast<std::int8_t>((word >> 8) & 0xffu));
                     decoded.pair[pair] =
-                        __floats2bfloat162_rn(static_cast<float>(q0), static_cast<float>(q1));
+                        ninfer_f32x2_to_bf16x2_rn(static_cast<float>(q0), static_cast<float>(q1));
                 }
                 store_vec(&mainloop.code_values[row][swizzle_128(row, col)], decoded.raw);
             }

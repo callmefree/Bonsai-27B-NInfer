@@ -56,6 +56,7 @@
 //     one scale application per chunk, which is also why that is the natural chunk.
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/linear/ternary/ternary_rowsplit_storage.cuh"
 
@@ -237,9 +238,9 @@ void ternary_wide_t_kernel(const __nv_bfloat16* __restrict__ x,
     for (int i = tid; i < 256; i += kTernaryWideThreads) {
         TernaryWidePairBits low;
         TernaryWidePairBits high;
-        low.pair  = __floats2bfloat162_rn(static_cast<float>((i & 3) - 1),
+        low.pair  = ninfer_f32x2_to_bf16x2_rn(static_cast<float>((i & 3) - 1),
                                          static_cast<float>(((i >> 2) & 3) - 1));
-        high.pair = __floats2bfloat162_rn(static_cast<float>(((i >> 4) & 3) - 1),
+        high.pair = ninfer_f32x2_to_bf16x2_rn(static_cast<float>(((i >> 4) & 3) - 1),
                                           static_cast<float>(((i >> 6) & 3) - 1));
         uint2 entry;
         entry.x = low.bits;

@@ -4,6 +4,7 @@
 // SiLU is computed as x / (1 + exp(-x)) in fp32, with no polynomial approximation.
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -132,7 +133,7 @@ __global__ void causal_conv1d_prefill_pairs_kernel(const __nv_bfloat16* x,
     causal_conv1d_acc_pair(weight2[C2 + p], x1, acc0, acc1);
     causal_conv1d_acc_pair(weight2[2 * C2 + p], x2v, acc0, acc1);
     causal_conv1d_acc_pair(weight2[3 * C2 + p], x3, acc0, acc1);
-    *out.column(p).at(t) = __floats2bfloat162_rn(silu(acc0), silu(acc1));
+    *out.column(p).at(t) = ninfer_f32x2_to_bf16x2_rn(silu(acc0), silu(acc1));
 }
 
 // Writes the trailing width-3 conv window after consuming the T input columns.

@@ -1,4 +1,5 @@
 #include "ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 #include "core/device.h"
 #include "ops/common/math.cuh"
 #include "ops/common/memory.cuh"
@@ -84,7 +85,7 @@ __global__ __launch_bounds__(Threads) void gdn_norm_gating_27_simt(
             if (first + t < tokens) {
                 const auto i   = std::int64_t(first + t) * (D / 2) + pair;
                 const float2 v = __bfloat1622float2(reinterpret_cast<const __nv_bfloat162*>(x)[i]);
-                reinterpret_cast<__nv_bfloat162*>(h)[i] = __floats2bfloat162_rn(
+                reinterpret_cast<__nv_bfloat162*>(h)[i] = ninfer_f32x2_to_bf16x2_rn(
                     v.x * inverse[t] * (1 + n.x), v.y * inverse[t] * (1 + n.y));
             }
     }

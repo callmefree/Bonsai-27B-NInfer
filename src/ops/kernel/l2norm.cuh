@@ -3,6 +3,7 @@
 // ninfer::ops - L2Norm kernels over contiguous BF16 rows.
 
 #include "ops/common/warp.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -47,7 +48,7 @@ __launch_bounds__(Block) __global__
         const int pair = lane + k * kWarpSize;
         if (pair < pairs) {
             const float2 xf      = __bfloat1622float2(values[k]);
-            out[row_base + pair] = __floats2bfloat162_rn(xf.x * inv, xf.y * inv);
+            out[row_base + pair] = ninfer_f32x2_to_bf16x2_rn(xf.x * inv, xf.y * inv);
         }
     }
 }

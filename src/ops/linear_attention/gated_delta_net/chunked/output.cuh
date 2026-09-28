@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/linear_attention/gated_delta_net/chunked/common.cuh"
 
 #include <cmath>
@@ -324,9 +325,9 @@ output_job(const __nv_bfloat16* __restrict__ q_in,
         for (int nt = 0; nt < D_PANEL / MMA_N; ++nt) {
             const int d_global = d_off + nt * MMA_N + 2 * lane_t;
             const __nv_bfloat162 out0 =
-                __floats2bfloat162_rn(scale * D_frag[nt][0], scale * D_frag[nt][1]);
+                ninfer_f32x2_to_bf16x2_rn(scale * D_frag[nt][0], scale * D_frag[nt][1]);
             const __nv_bfloat162 out1 =
-                __floats2bfloat162_rn(scale * D_frag[nt][2], scale * D_frag[nt][3]);
+                ninfer_f32x2_to_bf16x2_rn(scale * D_frag[nt][2], scale * D_frag[nt][3]);
             store_vec(&attn_out[vn_base + static_cast<std::int64_t>(row_g0) * value_row_stride +
                                 d_global],
                       out0);

@@ -1,4 +1,5 @@
 #include "ops/linear_topk/linear_topk_launch.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/common/memory.cuh"
@@ -161,7 +162,7 @@ __launch_bounds__(M64Schedule<TileColumns, kBlockK>::kThreads, 2) void q4_m64_li
                     const unsigned byte = packed >> (pair * 8);
                     const int q0        = (static_cast<int>(byte & 0x0fu) ^ 0x08) - 0x08;
                     const int q1        = (static_cast<int>((byte >> 4) & 0x0fu) ^ 0x08) - 0x08;
-                    decoded.pair[pair]  = __floats2bfloat162_rn(static_cast<float>(q0) * scale,
+                    decoded.pair[pair]  = ninfer_f32x2_to_bf16x2_rn(static_cast<float>(q0) * scale,
                                                                 static_cast<float>(q1) * scale);
                 }
                 store_vec(&mainloop.weights[row][swizzle_128(row, col)], decoded.raw);

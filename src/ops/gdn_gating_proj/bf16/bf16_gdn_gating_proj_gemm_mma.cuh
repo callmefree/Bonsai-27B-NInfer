@@ -13,6 +13,7 @@
 // its launcher may submit independent token-tile slices when the whole grid cannot reside.
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/rowsplit_mma.cuh"
 #include "ops/common/warp.cuh"
 
@@ -176,7 +177,7 @@ __global__ __launch_bounds__(Warps * 32, 1) void bf16_gdn_gating_proj_gemm_mma_k
                     for (int pair = 0; pair < 4; ++pair) {
                         const float2 value              = __bfloat1622float2(source[pair]);
                         const float2 weight             = __bfloat1622float2(gain[pair]);
-                        const __nv_bfloat162 normalized = __floats2bfloat162_rn(
+                        const __nv_bfloat162 normalized = ninfer_f32x2_to_bf16x2_rn(
                             value.x * (1.0f + weight.x), value.y * (1.0f + weight.y));
                         target[pair] = normalized;
                     }

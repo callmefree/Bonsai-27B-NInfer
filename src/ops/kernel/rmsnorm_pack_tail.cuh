@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/warp.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -69,7 +70,7 @@ __global__ __launch_bounds__(kBlock) void rmsnorm_pack_tail_kernel(
         const int pair             = static_cast<int>(threadIdx.x) + item * kBlock;
         const float2 x             = __bfloat1622float2(values[item]);
         const float2 w             = __bfloat1622float2(weights[item]);
-        output[output_base + pair] = __floats2bfloat162_rn(x.x * inv * w.x, x.y * inv * w.y);
+        output[output_base + pair] = ninfer_f32x2_to_bf16x2_rn(x.x * inv * w.x, x.y * inv * w.y);
     }
 }
 

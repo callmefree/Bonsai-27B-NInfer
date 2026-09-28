@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/linear_attention/gated_delta_net/chunked/common.cuh"
 
 #include <cmath>
@@ -316,10 +317,10 @@ compute_store_wu_panel(SmemTile<BT> T_view, SmemTile<WU_PANEL_COLS> panel,
         const int col = n * MMA_N + col_pair;
         store_vec(&warp_output[lane_g * WARP_PANEL_COLS +
                                wu_output_swizzled_col<WARP_PANEL_COLS>(lane_g, col)],
-                  __floats2bfloat162_rn(D[n][0], D[n][1]));
+                  ninfer_f32x2_to_bf16x2_rn(D[n][0], D[n][1]));
         store_vec(&warp_output[(lane_g + 8) * WARP_PANEL_COLS +
                                wu_output_swizzled_col<WARP_PANEL_COLS>(lane_g + 8, col)],
-                  __floats2bfloat162_rn(D[n][2], D[n][3]));
+                  ninfer_f32x2_to_bf16x2_rn(D[n][2], D[n][3]));
     }
     __syncwarp();
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_bf16.h>
+#include "ops/common/bf16_compat.cuh"
 
 #include <cstdint>
 
@@ -93,7 +94,7 @@ __launch_bounds__(Block) __global__
         const float2 scales = __bfloat1622float2(weight[pair]);
         const float2 shifts = __bfloat1622float2(bias[pair]);
         out[base + pair] =
-            __floats2bfloat162_rn((values.x - final_mean) * final_inv * scales.x + shifts.x,
+            ninfer_f32x2_to_bf16x2_rn((values.x - final_mean) * final_inv * scales.x + shifts.x,
                                   (values.y - final_mean) * final_inv * scales.y + shifts.y);
     }
 }
@@ -128,7 +129,7 @@ __launch_bounds__(Block) __global__
         const float2 values = __bfloat1622float2(x[base + pair]);
         const float2 scales = __bfloat1622float2(weight[pair]);
         const float2 shifts = __bfloat1622float2(bias[pair]);
-        out[base + pair]    = __floats2bfloat162_rn((values.x - mean) * inv * scales.x + shifts.x,
+        out[base + pair]    = ninfer_f32x2_to_bf16x2_rn((values.x - mean) * inv * scales.x + shifts.x,
                                                     (values.y - mean) * inv * scales.y + shifts.y);
     }
 }

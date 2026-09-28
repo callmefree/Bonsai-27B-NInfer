@@ -1,4 +1,5 @@
 #include "ops/sparse_moe/prefill/sparse_moe_prefill.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/common/math.cuh"
@@ -645,7 +646,7 @@ __global__ __launch_bounds__(kExpertThreads, 1) void sparse_moe_prefill_w8_gate_
                         *reinterpret_cast<const std::uint16_t*>(&Cr[row * kExpertBK + col]);
                     const int q0 = static_cast<int>(static_cast<std::int8_t>(packed & 0xffu));
                     const int q1 = static_cast<int>(static_cast<std::int8_t>(packed >> 8));
-                    const __nv_bfloat162 value = __floats2bfloat162_rn(
+                    const __nv_bfloat162 value = ninfer_f32x2_to_bf16x2_rn(
                         static_cast<float>(q0) * scale, static_cast<float>(q1) * scale);
                     store_vec(&As[row * kExpertBK + gemm_swz64(row, col)], value);
                 }
@@ -1033,7 +1034,7 @@ __global__ __launch_bounds__(kExpertThreads, 1) void sparse_moe_prefill_w8_down_
                         *reinterpret_cast<const std::uint16_t*>(&Cr[row * kExpertBK + col]);
                     const int q0 = static_cast<int>(static_cast<std::int8_t>(packed & 0xffu));
                     const int q1 = static_cast<int>(static_cast<std::int8_t>(packed >> 8));
-                    const __nv_bfloat162 value = __floats2bfloat162_rn(
+                    const __nv_bfloat162 value = ninfer_f32x2_to_bf16x2_rn(
                         static_cast<float>(q0) * scale, static_cast<float>(q1) * scale);
                     store_vec(&As[row * kExpertBK + gemm_swz64(row, col)], value);
                 }

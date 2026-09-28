@@ -7,6 +7,7 @@
 // output vectors, while the output policy remains replaceable by a fused semantic Op.
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/common/mma.cuh"
 
@@ -332,8 +333,8 @@ __global__ __launch_bounds__(Schedule::kThreads, Schedule::kMinBlocksPerSm) void
                 shared_output + (token0 - token_begin) * output_stride + local_row0);
             auto* destination1 = reinterpret_cast<__nv_bfloat162*>(
                 shared_output + (token1 - token_begin) * output_stride + local_row0);
-            *destination0 = __floats2bfloat162_rn(value00, value01);
-            *destination1 = __floats2bfloat162_rn(value10, value11);
+            *destination0 = ninfer_f32x2_to_bf16x2_rn(value00, value01);
+            *destination1 = ninfer_f32x2_to_bf16x2_rn(value10, value11);
         }
     }
     __syncthreads();

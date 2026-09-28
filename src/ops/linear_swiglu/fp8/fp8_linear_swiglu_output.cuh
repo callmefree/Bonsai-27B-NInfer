@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 
 #include <cuda_bf16.h>
@@ -34,7 +35,7 @@ struct Fp8SwiGluOutput {
         const float2 gate_values = __bfloat1622float2(gate.values);
         const float2 up_values   = __bfloat1622float2(up.values);
         Fp8SwiGluBf16Pair result;
-        result.values = __floats2bfloat162_rn(silu(gate_values.x) * up_values.x,
+        result.values = ninfer_f32x2_to_bf16x2_rn(silu(gate_values.x) * up_values.x,
                                               silu(gate_values.y) * up_values.y);
         return result.bits;
     }

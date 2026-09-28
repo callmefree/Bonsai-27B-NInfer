@@ -3,6 +3,7 @@
 // ninfer::ops - RMSNorm kernels over contiguous BF16 rows.
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/warp.cuh"
 
 #include <cuda_bf16.h>
@@ -85,7 +86,7 @@ __launch_bounds__(Block) __global__
             float2 zf{0.0f, 0.0f};
             if constexpr (Epilogue == RmsEpilogue::Gated) { zf = __bfloat1622float2(z_pair); }
             out[row_base + pair] =
-                __floats2bfloat162_rn(rmsnorm_epilogue<Epilogue>(xf.x, inv, wf.x, zf.x),
+                ninfer_f32x2_to_bf16x2_rn(rmsnorm_epilogue<Epilogue>(xf.x, inv, wf.x, zf.x),
                                       rmsnorm_epilogue<Epilogue>(xf.y, inv, wf.y, zf.y));
         }
     }
@@ -128,10 +129,10 @@ __launch_bounds__(Block) __global__
         z1 = __bfloat1622float2(z[row_base + pair1]);
     }
     out[row_base + pair0] =
-        __floats2bfloat162_rn(rmsnorm_epilogue<Epilogue>(x0.x, inv, w0.x, z0.x),
+        ninfer_f32x2_to_bf16x2_rn(rmsnorm_epilogue<Epilogue>(x0.x, inv, w0.x, z0.x),
                               rmsnorm_epilogue<Epilogue>(x0.y, inv, w0.y, z0.y));
     out[row_base + pair1] =
-        __floats2bfloat162_rn(rmsnorm_epilogue<Epilogue>(x1.x, inv, w1.x, z1.x),
+        ninfer_f32x2_to_bf16x2_rn(rmsnorm_epilogue<Epilogue>(x1.x, inv, w1.x, z1.x),
                               rmsnorm_epilogue<Epilogue>(x1.y, inv, w1.y, z1.y));
 }
 
@@ -198,7 +199,7 @@ __launch_bounds__(Block) __global__
             float2 zf{0.0f, 0.0f};
             if constexpr (Epilogue == RmsEpilogue::Gated) { zf = __bfloat1622float2(z_pair); }
             out[row_base + pair] =
-                __floats2bfloat162_rn(rmsnorm_epilogue<Epilogue>(xf.x, inv, wf.x, zf.x),
+                ninfer_f32x2_to_bf16x2_rn(rmsnorm_epilogue<Epilogue>(xf.x, inv, wf.x, zf.x),
                                       rmsnorm_epilogue<Epilogue>(xf.y, inv, wf.y, zf.y));
         }
     }
@@ -242,10 +243,10 @@ __launch_bounds__(512) __global__
         z1 = __bfloat1622float2(z[row_base + pair1]);
     }
     out[row_base + pair0] =
-        __floats2bfloat162_rn(rmsnorm_epilogue<Epilogue>(x0.x, inv, w0.x, z0.x),
+        ninfer_f32x2_to_bf16x2_rn(rmsnorm_epilogue<Epilogue>(x0.x, inv, w0.x, z0.x),
                               rmsnorm_epilogue<Epilogue>(x0.y, inv, w0.y, z0.y));
     out[row_base + pair1] =
-        __floats2bfloat162_rn(rmsnorm_epilogue<Epilogue>(x1.x, inv, w1.x, z1.x),
+        ninfer_f32x2_to_bf16x2_rn(rmsnorm_epilogue<Epilogue>(x1.x, inv, w1.x, z1.x),
                               rmsnorm_epilogue<Epilogue>(x1.y, inv, w1.y, z1.y));
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/linear_attention/gated_delta_net/chunked/common.cuh"
 
 // Stage 3: chunk-sequential state passing.
@@ -370,8 +371,8 @@ __launch_bounds__(kernel_dims<NStrip>::THREADS, kernel_dims<NStrip>::MIN_BLOCKS)
                     const int d_global = d_off + d_local;
                     __nv_bfloat16* out =
                         &h_chunk[hc_base + (int64_t)d_global * kStateDim + k_row_off + k_off];
-                    store_vec(out, __floats2bfloat162_rn(val.x, val.y));
-                    store_vec(out + 2, __floats2bfloat162_rn(val.z, val.w));
+                    store_vec(out, ninfer_f32x2_to_bf16x2_rn(val.x, val.y));
+                    store_vec(out + 2, ninfer_f32x2_to_bf16x2_rn(val.z, val.w));
                 }
             }
 
@@ -449,8 +450,8 @@ __launch_bounds__(kernel_dims<NStrip>::THREADS, kernel_dims<NStrip>::MIN_BLOCKS)
             const float v2 = vnew_frag[m_mm1][2];
             const float v3 = vnew_frag[m_mm1][3];
 
-            const __nv_bfloat162 out0 = __floats2bfloat162_rn(v0, v1);
-            const __nv_bfloat162 out1 = __floats2bfloat162_rn(v2, v3);
+            const __nv_bfloat162 out0 = ninfer_f32x2_to_bf16x2_rn(v0, v1);
+            const __nv_bfloat162 out1 = ninfer_f32x2_to_bf16x2_rn(v2, v3);
             store_vec(&v_new[vn_base + (int64_t)row_g0 * vn_stride + col_d0], out0);
             store_vec(&v_new[vn_base + (int64_t)row_g1 * vn_stride + col_d0], out1);
 
