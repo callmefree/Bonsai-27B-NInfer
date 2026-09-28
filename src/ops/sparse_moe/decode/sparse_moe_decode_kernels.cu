@@ -1,4 +1,5 @@
 #include "ops/sparse_moe/decode/sparse_moe_decode.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "core/pdl.cuh"
@@ -432,7 +433,7 @@ __global__ void sparse_moe_d4_nine_warp_kernel(
         float value = __bfloat162float(destination[row_base + lane]);
 #pragma unroll
         for (int path = 0; path < kTopK + 1; ++path) { value += paths[path][lane]; }
-        destination[row_base + lane] = __float2bfloat16_rn(value);
+        destination[row_base + lane] = ninfer_float_to_bf16(value);
     }
 }
 
@@ -496,7 +497,7 @@ __global__ void sparse_moe_d4_token_kernel(
             float value = __bfloat162float(*output);
 #pragma unroll
             for (int path = 0; path < kTopK + 1; ++path) { value += paths[path][lane]; }
-            *output = __float2bfloat16_rn(value);
+            *output = ninfer_float_to_bf16(value);
         }
         if constexpr (Adaptive) { __syncthreads(); }
     }

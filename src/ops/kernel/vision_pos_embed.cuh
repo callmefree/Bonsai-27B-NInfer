@@ -100,7 +100,7 @@ __global__ void vision_pos_embed_add_kernel(const __nv_bfloat16* table, const st
                             weights[control];
             }
         }
-        x[linear] = __float2bfloat16_rn(__bfloat162float(x[linear]) + position);
+        x[linear] = ninfer_float_to_bf16(__bfloat162float(x[linear]) + position);
     }
 }
 

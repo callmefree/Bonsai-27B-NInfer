@@ -14,6 +14,7 @@
 // groups do not form or read an activation address.
 
 #include "core/pdl.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/common/warp.cuh"
 #include "ops/linear/q4/q4_rowsplit_storage.cuh"
@@ -170,14 +171,14 @@ struct Q4SimtStoreEpilogue {
             if constexpr (SplitOutput) {
                 if (row < SplitRow) {
                     out[static_cast<std::int64_t>(col0 + col) * out_ld + row] =
-                        __float2bfloat16(values[col]);
+                        ninfer_float_to_bf16(values[col]);
                 } else {
                     out_tail[static_cast<std::int64_t>(col0 + col) * out_tail_ld + row - SplitRow] =
-                        __float2bfloat16(values[col]);
+                        ninfer_float_to_bf16(values[col]);
                 }
             } else {
                 out[static_cast<std::int64_t>(col0 + col) * out_ld + row] =
-                    __float2bfloat16(values[col]);
+                    ninfer_float_to_bf16(values[col]);
             }
         }
     }
@@ -293,14 +294,14 @@ __global__ __launch_bounds__(
                     if constexpr (SplitOutput) {
                         if (row < SplitRow) {
                             out[static_cast<std::int64_t>(col0 + col) * out_ld + row] =
-                                __float2bfloat16(sum);
+                                ninfer_float_to_bf16(sum);
                         } else {
                             out_tail[static_cast<std::int64_t>(col0 + col) * out_tail_ld + row -
-                                     SplitRow] = __float2bfloat16(sum);
+                                     SplitRow] = ninfer_float_to_bf16(sum);
                         }
                     } else {
                         out[static_cast<std::int64_t>(col0 + col) * out_ld + row] =
-                            __float2bfloat16(sum);
+                            ninfer_float_to_bf16(sum);
                     }
                 }
             }

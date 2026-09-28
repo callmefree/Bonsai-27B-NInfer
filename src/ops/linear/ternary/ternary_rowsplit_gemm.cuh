@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ops/linear/ternary/ternary_rowsplit_storage.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
@@ -108,7 +109,7 @@ void ternary_rowsplit_gemm_kernel(const __nv_bfloat16* __restrict__ x,
                 // out_row_stride is the PARENT's row count, so several projections can write
                 // disjoint row ranges of one fused output (the GDN split parent, for instance).
                 out[static_cast<std::int64_t>(token) * out_row_stride + row] =
-                    __float2bfloat16_rn(partials[i][0]);
+                    ninfer_float_to_bf16(partials[i][0]);
             }
         }
     }

@@ -1,4 +1,5 @@
 #include "ops/linear_swiglu/w8/w8_linear_swiglu_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/common/math.cuh"
@@ -84,7 +85,7 @@ __global__ __launch_bounds__(RowsPerCta * 32, 2) void w8_linear_swiglu_decode_pa
 
     gate_acc = warp_reduce_sum(gate_acc);
     up_acc   = warp_reduce_sum(up_acc);
-    if (lane == 0) { out[row] = __float2bfloat16_rn(silu(gate_acc) * up_acc); }
+    if (lane == 0) { out[row] = ninfer_float_to_bf16(silu(gate_acc) * up_acc); }
 }
 
 template <int RowsPerCta>

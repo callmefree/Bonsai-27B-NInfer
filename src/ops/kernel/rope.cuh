@@ -223,8 +223,8 @@ static __global__ void rope_generic_kernel(const std::int32_t* positions, std::i
             const float second       = __bfloat162float(data[base + pair + half]);
             const float c            = cos_cache[pair];
             const float s            = sin_cache[pair];
-            data[base + pair]        = __float2bfloat16_rn(first * c - second * s);
-            data[base + pair + half] = __float2bfloat16_rn(second * c + first * s);
+            data[base + pair]        = ninfer_float_to_bf16(first * c - second * s);
+            data[base + pair + half] = ninfer_float_to_bf16(second * c + first * s);
         }
     }
 }

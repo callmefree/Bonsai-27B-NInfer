@@ -30,7 +30,7 @@ __global__ void sigmoid_gate_mul_scalar_kernel(const __nv_bfloat16* gate, __nv_b
     const std::int64_t start  = blockIdx.x * static_cast<std::int64_t>(blockDim.x) + threadIdx.x;
     const std::int64_t stride = static_cast<std::int64_t>(gridDim.x) * blockDim.x;
     for (std::int64_t i = start; i < n; i += stride) {
-        x[i] = __float2bfloat16_rn(__bfloat162float(x[i]) * sigmoid(__bfloat162float(gate[i])));
+        x[i] = ninfer_float_to_bf16(__bfloat162float(x[i]) * sigmoid(__bfloat162float(gate[i])));
     }
 }
 
@@ -82,7 +82,7 @@ __launch_bounds__(256) __global__
 
     if (tid == 0 && (n & 1) != 0) {
         const std::int64_t i = n - 1;
-        x[i] = __float2bfloat16_rn(__bfloat162float(x[i]) * sigmoid(__bfloat162float(gate[i])));
+        x[i] = ninfer_float_to_bf16(__bfloat162float(x[i]) * sigmoid(__bfloat162float(gate[i])));
     }
 }
 

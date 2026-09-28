@@ -1,4 +1,5 @@
 #include "ops/linear_swiglu/nvfp4/nvfp4_linear_swiglu_plan.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/common/math.cuh"
@@ -67,7 +68,7 @@ __global__ __launch_bounds__(
         up   = warp_reduce_sum(up);
         if (lane == 0) {
             out[static_cast<std::int64_t>(token) * kIntermediate + gate_row] =
-                __float2bfloat16_rn(silu(gate) * up);
+                ninfer_float_to_bf16(silu(gate) * up);
         }
     }
 }

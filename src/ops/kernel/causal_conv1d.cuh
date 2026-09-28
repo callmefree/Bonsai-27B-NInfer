@@ -98,7 +98,7 @@ __global__ void causal_conv1d_prefill_kernel(const __nv_bfloat16* x, const __nv_
     acc += __bfloat162float(weight[C64 + c]) * __bfloat162float(x1);
     acc += __bfloat162float(weight[2 * C64 + c]) * __bfloat162float(x2);
     acc += __bfloat162float(weight[3 * C64 + c]) * __bfloat162float(x3);
-    *out.column(c64).at(t) = __float2bfloat16_rn(silu(acc));
+    *out.column(c64).at(t) = ninfer_float_to_bf16(silu(acc));
 }
 
 template <class Output>
@@ -194,11 +194,11 @@ __global__ void causal_conv1d_smallt_kernel(const __nv_bfloat16* x, const __nv_b
     if (t == 0) {
         for (std::int32_t s = 0; s < 3; ++s) {
             history[s][lane] = valid ? conv_state_in[static_cast<std::int64_t>(s) * C64 + c64]
-                                     : __float2bfloat16(0.0f);
+                                     : ninfer_float_to_bf16(0.0f);
         }
         for (std::int32_t r = 0; r < 4; ++r) {
             weights[r][lane] =
-                valid ? weight[static_cast<std::int64_t>(r) * C64 + c64] : __float2bfloat16(0.0f);
+                valid ? weight[static_cast<std::int64_t>(r) * C64 + c64] : ninfer_float_to_bf16(0.0f);
         }
     }
     __syncthreads();
@@ -221,7 +221,7 @@ __global__ void causal_conv1d_smallt_kernel(const __nv_bfloat16* x, const __nv_b
     acc += __bfloat162float(weights[1][lane]) * __bfloat162float(x1);
     acc += __bfloat162float(weights[2][lane]) * __bfloat162float(x2);
     acc += __bfloat162float(weights[3][lane]) * __bfloat162float(x3);
-    *out.column(c64).at(t) = __float2bfloat16_rn(silu(acc));
+    *out.column(c64).at(t) = ninfer_float_to_bf16(silu(acc));
 
     if (t == 0) {
         for (std::int32_t s = 0; s < 3; ++s) {
@@ -252,7 +252,7 @@ __global__ void causal_conv1d_decode_kernel(const __nv_bfloat16* x, const __nv_b
         acc += __bfloat162float(weight[2 * C64 + c]) * __bfloat162float(s2);
         acc += __bfloat162float(weight[3 * C64 + c]) * __bfloat162float(x0);
 
-        out[c]                  = __float2bfloat16_rn(silu(acc));
+        out[c]                  = ninfer_float_to_bf16(silu(acc));
         conv_state[c]           = s1;
         conv_state[C64 + c]     = s2;
         conv_state[2 * C64 + c] = x0;
@@ -280,7 +280,7 @@ __global__ void causal_conv1d_decode_distinct_kernel(
         acc += __bfloat162float(weight[2 * C64 + c]) * __bfloat162float(s2);
         acc += __bfloat162float(weight[3 * C64 + c]) * __bfloat162float(x0);
 
-        out[c]                      = __float2bfloat16_rn(silu(acc));
+        out[c]                      = ninfer_float_to_bf16(silu(acc));
         conv_state_out[c]           = s1;
         conv_state_out[C64 + c]     = s2;
         conv_state_out[2 * C64 + c] = x0;
@@ -311,7 +311,7 @@ __global__ void causal_conv1d_snapshot_decode_kernel(
         acc += __bfloat162float(weight[2 * C64 + c]) * __bfloat162float(s2);
         acc += __bfloat162float(weight[3 * C64 + c]) * __bfloat162float(x0);
 
-        out[c] = __float2bfloat16_rn(silu(acc));
+        out[c] = ninfer_float_to_bf16(silu(acc));
         __nv_bfloat16* snapshot =
             conv_states + static_cast<std::int64_t>(*snapshot_base_slot) * slot_stride;
         snapshot[c]           = s1;
@@ -349,7 +349,7 @@ causal_conv1d_sequence_snapshot_kernel(const __nv_bfloat16* x, const __nv_bfloat
         acc += w2 * __bfloat162float(s2);
         acc += w3 * __bfloat162float(x0);
 
-        out[out_idx] = __float2bfloat16_rn(silu(acc));
+        out[out_idx] = ninfer_float_to_bf16(silu(acc));
         s0           = s1;
         s1           = s2;
         s2           = x0;
@@ -391,7 +391,7 @@ __global__ void causal_conv1d_batched_sequence_snapshot_kernel(
     for (std::int32_t column = 0; column < width; ++column) {
         const std::int64_t out_idx = row_base + static_cast<std::int64_t>(column) * C64 + c64;
         if (column >= valid) {
-            out[out_idx] = __float2bfloat16(0.0f);
+            out[out_idx] = ninfer_float_to_bf16(0.0f);
             continue;
         }
 
@@ -401,7 +401,7 @@ __global__ void causal_conv1d_batched_sequence_snapshot_kernel(
         acc += w1 * __bfloat162float(s1);
         acc += w2 * __bfloat162float(s2);
         acc += w3 * __bfloat162float(x0);
-        out[out_idx] = __float2bfloat16_rn(silu(acc));
+        out[out_idx] = ninfer_float_to_bf16(silu(acc));
         s0           = s1;
         s1           = s2;
         s2           = x0;
@@ -437,11 +437,11 @@ causal_conv1d_snapshot_smallt_kernel(const __nv_bfloat16* x, const __nv_bfloat16
         const __nv_bfloat16* init = conv_states + static_cast<std::int64_t>(slot) * slot_stride;
         for (std::int32_t s = 0; s < 3; ++s) {
             history[s][lane] =
-                valid ? init[static_cast<std::int64_t>(s) * C64 + c64] : __float2bfloat16(0.0f);
+                valid ? init[static_cast<std::int64_t>(s) * C64 + c64] : ninfer_float_to_bf16(0.0f);
         }
         for (std::int32_t r = 0; r < 4; ++r) {
             weights[r][lane] =
-                valid ? weight[static_cast<std::int64_t>(r) * C64 + c64] : __float2bfloat16(0.0f);
+                valid ? weight[static_cast<std::int64_t>(r) * C64 + c64] : ninfer_float_to_bf16(0.0f);
         }
     }
     __syncthreads();
@@ -464,7 +464,7 @@ causal_conv1d_snapshot_smallt_kernel(const __nv_bfloat16* x, const __nv_bfloat16
     acc += __bfloat162float(weights[1][lane]) * __bfloat162float(x1);
     acc += __bfloat162float(weights[2][lane]) * __bfloat162float(x2);
     acc += __bfloat162float(weights[3][lane]) * __bfloat162float(x3);
-    out[out_idx] = __float2bfloat16_rn(silu(acc));
+    out[out_idx] = ninfer_float_to_bf16(silu(acc));
 
     __nv_bfloat16* snapshot =
         conv_states + static_cast<std::int64_t>(*snapshot_base_slot + t) * slot_stride;
@@ -496,11 +496,11 @@ __global__ void causal_conv1d_batched_snapshot_smallt_kernel(
             conv_states + static_cast<std::int64_t>(initial_state_slots[batch]) * slot_stride;
         for (std::int32_t s = 0; s < 3; ++s) {
             history[s][lane] = channel_valid ? init[static_cast<std::int64_t>(s) * C64 + c64]
-                                             : __float2bfloat16(0.0f);
+                                             : ninfer_float_to_bf16(0.0f);
         }
         for (std::int32_t r = 0; r < 4; ++r) {
             weights[r][lane] = channel_valid ? weight[static_cast<std::int64_t>(r) * C64 + c64]
-                                             : __float2bfloat16(0.0f);
+                                             : ninfer_float_to_bf16(0.0f);
         }
     }
     __syncthreads();
@@ -510,7 +510,7 @@ __global__ void causal_conv1d_batched_snapshot_smallt_kernel(
     const std::int64_t row_base = static_cast<std::int64_t>(batch) * width * C64;
     const std::int64_t out_idx  = row_base + static_cast<std::int64_t>(column) * C64 + c64;
     if (column >= valid) {
-        out[out_idx] = __float2bfloat16(0.0f);
+        out[out_idx] = ninfer_float_to_bf16(0.0f);
         return;
     }
 
@@ -530,7 +530,7 @@ __global__ void causal_conv1d_batched_snapshot_smallt_kernel(
     acc += __bfloat162float(weights[1][lane]) * __bfloat162float(x1);
     acc += __bfloat162float(weights[2][lane]) * __bfloat162float(x2);
     acc += __bfloat162float(weights[3][lane]) * __bfloat162float(x3);
-    out[out_idx] = __float2bfloat16_rn(silu(acc));
+    out[out_idx] = ninfer_float_to_bf16(silu(acc));
 
     __nv_bfloat16* snapshot =
         conv_states + static_cast<std::int64_t>(snapshot_base_slots[batch] + column) * slot_stride;

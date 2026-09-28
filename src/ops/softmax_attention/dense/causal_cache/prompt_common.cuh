@@ -5,6 +5,7 @@
 // shared-memory arena, warp schedule, or kernel body.
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/mma.cuh"
 #include "ops/common/warp.cuh"
 #include "ops/softmax_attention/dense/causal_cache/geometry.cuh"
@@ -48,7 +49,7 @@ __device__ __forceinline__ void causal_prompt_zero_output_rows(__nv_bfloat16* ou
     for (int element = tid; element < elements; element += threads) {
         const int row = row_begin + element / kCausalPromptHeadDim;
         const int d   = element - (row - row_begin) * kCausalPromptHeadDim;
-        out[causal_prompt_q_index<Geometry>(q_head, d, row)] = __float2bfloat16(0.0f);
+        out[causal_prompt_q_index<Geometry>(q_head, d, row)] = ninfer_float_to_bf16(0.0f);
     }
 }
 

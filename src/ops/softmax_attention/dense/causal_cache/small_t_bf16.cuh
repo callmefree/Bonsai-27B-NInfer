@@ -7,6 +7,7 @@
 // one query-head subgroup, and one token tile; a reducer combines FP32 split-local partials.
 
 #include <cuda_bf16.h>
+#include "ops/common/bf16_compat.cuh"
 #include <cuda_fp16.h>
 #include <math_constants.h>
 
@@ -175,7 +176,7 @@ __launch_bounds__(128, 2) __global__ void causal_attention_small_t_tc_partial_bf
         int q_head    = 0;
         int token     = 0;
         causal_small_t_tc_row_to_qt<Geometry>(row, tokens, kv_head, q_head, token);
-        __nv_bfloat16 value = __float2bfloat16(0.0f);
+        __nv_bfloat16 value = ninfer_float_to_bf16(0.0f);
         if (row < row_count && causal_valid_q_head<Geometry>(kv_head, q_head)) {
             value = q[causal_q_index<Geometry>(q_head, d, token)];
         }

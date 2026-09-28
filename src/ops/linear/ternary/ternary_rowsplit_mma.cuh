@@ -56,6 +56,7 @@
 // nothing tried so far lengthens that chain.
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
@@ -378,7 +379,7 @@ void ternary_rowsplit_mma_kernel(
             const float* values   = accum[mi][ni];
             auto store            = [&](int row, int col, float value) {
                 out[static_cast<std::int64_t>(col) * out_row_stride + row] =
-                    __float2bfloat16_rn(value);
+                    ninfer_float_to_bf16(value);
             };
             if constexpr (Full) {
                 store(output_row0, output_col0, values[0]);

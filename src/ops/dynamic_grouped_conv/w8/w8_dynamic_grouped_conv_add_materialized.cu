@@ -1,4 +1,5 @@
 #include "ops/dynamic_grouped_conv/w8/w8_dynamic_grouped_conv_add_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 #include "core/device.h"
 #include "ops/linear/w8/w8_config.h"
 #include "ops/linear/w8/w8_launch.h"
@@ -24,7 +25,7 @@ __device__ __forceinline__ void finish_value(int row, int col, int width, float 
         value =
             fmaf(__bfloat162float(base[3 * kRows + row]) + __bfloat162float(delta[di + kGroups]),
                  previous, value);
-    residual[index] = __float2bfloat16_rn(value);
+    residual[index] = ninfer_float_to_bf16(value);
 }
 
 using Launch = W8Launch;

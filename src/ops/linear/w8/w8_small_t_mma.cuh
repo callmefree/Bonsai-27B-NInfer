@@ -8,6 +8,7 @@
 // optional caller epilogue may instead consume the FP32 tile.
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/linear/w8/w8_config.h"
 #include "ops/linear/w8/w8_rowsplit_output.cuh"
@@ -335,7 +336,7 @@ w8_small_t_mma(const __nv_bfloat16* __restrict__ x, const std::uint8_t* __restri
                     if constexpr (std::is_same_v<Epilogue, W8SmallTMmaResidualEpilogue>) {
                         value += __bfloat162float(*destination);
                     }
-                    *destination = __float2bfloat16_rn(value);
+                    *destination = ninfer_float_to_bf16(value);
                 };
                 if (col0 < ActiveCols) {
                     store(cta_row0 + gid, col0, sum.x);

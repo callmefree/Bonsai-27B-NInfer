@@ -104,7 +104,7 @@ __global__ void embed_gather_q6_kernel(const std::int32_t* ids, const std::uint8
         const float scale = __half2float(__ushort_as_half(scale_bits));
         const int code    = unpack_q6_code(codes + group_index * kEmbedGatherQ6NibbleBpr,
                                            high + group_index * kEmbedGatherQ6HighBpr, lane);
-        out[i]            = __float2bfloat16(static_cast<float>(code) * scale);
+        out[i]            = ninfer_float_to_bf16(static_cast<float>(code) * scale);
     }
 }
 
@@ -135,7 +135,7 @@ __launch_bounds__(kEmbedGatherQ6Group* kEmbedGatherQ6GroupsPerBlock) __global__
                                        high + group_index * kEmbedGatherQ6HighBpr, lane);
     const std::int64_t out_idx = static_cast<std::int64_t>(t) * d +
                                  static_cast<std::int64_t>(g) * kEmbedGatherQ6Group + lane;
-    out[out_idx] = __float2bfloat16(static_cast<float>(code) * scale);
+    out[out_idx] = ninfer_float_to_bf16(static_cast<float>(code) * scale);
 }
 
 __global__ void embed_gather_w8_kernel(const std::int32_t* ids, const std::uint8_t* codes,
@@ -158,7 +158,7 @@ __global__ void embed_gather_w8_kernel(const std::int32_t* ids, const std::uint8
                                        << 8);
         const float scale = __half2float(__ushort_as_half(scale_bits));
         const auto code = static_cast<std::int8_t>(codes[group_index * kEmbedGatherW8Group + lane]);
-        out[i]          = __float2bfloat16(static_cast<float>(code) * scale);
+        out[i]          = ninfer_float_to_bf16(static_cast<float>(code) * scale);
     }
 }
 
@@ -216,7 +216,7 @@ __launch_bounds__(32) __global__
         codes[group_index * kEmbedGatherW8Group + static_cast<std::int32_t>(threadIdx.x)]);
     const std::int64_t out_idx = static_cast<std::int64_t>(t) * kEmbedGatherW8D +
                                  static_cast<std::int64_t>(g) * kEmbedGatherW8Group + threadIdx.x;
-    out[out_idx] = __float2bfloat16(static_cast<float>(code) * scale);
+    out[out_idx] = ninfer_float_to_bf16(static_cast<float>(code) * scale);
 }
 
 __launch_bounds__(256) __global__
@@ -280,7 +280,7 @@ __global__ void embed_gather_ternary_kernel(const std::int32_t* ids, const std::
         const std::uint8_t* group_high =
             high == nullptr ? nullptr : high + group_index * Storage::kHighBytesPerGroup;
         const float scale = Atom::load_scale(scales + group_index * Storage::kScaleBytesPerGroup);
-        out[i]            = __float2bfloat16(Atom::decode_one(group_codes, group_high, scale, lane));
+        out[i]            = ninfer_float_to_bf16(Atom::decode_one(group_codes, group_high, scale, lane));
     }
 }
 

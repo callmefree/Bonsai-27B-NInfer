@@ -6,6 +6,7 @@
 // the warp's first and second row halves pair directly in the SiLU epilogue.
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/rowsplit_mma.cuh"
 #include "ops/linear/q4/q4_rowsplit_storage.cuh"
 
@@ -212,7 +213,7 @@ __launch_bounds__(Cfg::THREADS, Cfg::MIN_BLOCKS) void q4_linear_swiglu_mma_split
             const int cc1 = cc0 + 1;
             auto store    = [&](int col, int row, float gv, float uv) {
                 out[static_cast<std::int64_t>(col) * intermediate + row] =
-                    __float2bfloat16_rn(silu(gv) * uv);
+                    ninfer_float_to_bf16(silu(gv) * uv);
             };
             if constexpr (FullTiles) {
                 store(cc0, r0, acc[mi][ni][0], acc[mi + MT / 2][ni][0]);

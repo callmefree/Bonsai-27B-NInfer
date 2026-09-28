@@ -1,4 +1,5 @@
 #include "ops/attn_input_proj/bf16/bf16_attn_input_plan.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/linear/bf16/bf16_config.h"
@@ -30,7 +31,7 @@ struct Bf16AttentionInputSmallTOutput {
         constexpr std::int32_t kKeyBegin   = kQueryRows;
         constexpr std::int32_t kGateBegin  = kKeyBegin + kKeyRows;
         constexpr std::int32_t kValueBegin = kGateBegin + kGateRows;
-        const __nv_bfloat16 value_bf16     = __float2bfloat16_rn(result);
+        const __nv_bfloat16 value_bf16     = ninfer_float_to_bf16(result);
 
         if (parent_row < kKeyBegin) {
             query[static_cast<std::int64_t>(token) * kQueryRows + parent_row] = value_bf16;

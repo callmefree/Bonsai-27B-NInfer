@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -26,11 +27,11 @@ struct W8SwiGluDirectEpilogue {
                                                int columns) const {
         if (col0 < columns) {
             out[static_cast<std::int64_t>(col0) * rows + row] =
-                __float2bfloat16_rn(silu(projected.x) * projected.z);
+                ninfer_float_to_bf16(silu(projected.x) * projected.z);
         }
         if (col0 + 1 < columns) {
             out[static_cast<std::int64_t>(col0 + 1) * rows + row] =
-                __float2bfloat16_rn(silu(projected.y) * projected.w);
+                ninfer_float_to_bf16(silu(projected.y) * projected.w);
         }
     }
 };

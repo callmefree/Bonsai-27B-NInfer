@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/mma.cuh"
 #include "ops/common/warp.cuh"
 
@@ -529,7 +530,7 @@ context_query_reduce_body(const __nv_bfloat16* __restrict__ partial_acc,
     if (q_head >= kContextQueryQHeads || token >= Tokens) { return; }
     if (length < 0 || length > max_context || token >= valid_columns[batch]) {
         if (tid < kContextQueryHeadDim) {
-            out[context_query_q_index(q_head, tid, token)] = __float2bfloat16(0.0f);
+            out[context_query_q_index(q_head, tid, token)] = ninfer_float_to_bf16(0.0f);
         }
         return;
     }
@@ -575,7 +576,7 @@ context_query_reduce_body(const __nv_bfloat16* __restrict__ partial_acc,
                 weight;
         }
         const float value = global_l > 0.0f ? numerator / global_l : 0.0f;
-        out[context_query_q_index(q_head, tid, token)] = __float2bfloat16(value);
+        out[context_query_q_index(q_head, tid, token)] = ninfer_float_to_bf16(value);
     }
 }
 

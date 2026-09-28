@@ -15,6 +15,7 @@
 // without dragging in Tensor/Weight/arena.
 
 #include "ops/kv_cache/hadamard_d256.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
@@ -120,12 +121,12 @@ __global__ void ternary_rotate_bf16_kernel(const __nv_bfloat16* __restrict__ x,
 #pragma unroll
         for (int r = 0; r < 32; ++r) {
             const float value = __fmul_rn(values[r], signs_row[r * 32 + lane]);
-            out_token[(block << 10) + r * 32 + lane] = __float2bfloat16_rn(value);
+            out_token[(block << 10) + r * 32 + lane] = ninfer_float_to_bf16(value);
         }
     } else {
 #pragma unroll
         for (int r = 0; r < 32; ++r) {
-            out_token[(block << 10) + r * 32 + lane] = __float2bfloat16_rn(values[r]);
+            out_token[(block << 10) + r * 32 + lane] = ninfer_float_to_bf16(values[r]);
         }
     }
 }
@@ -166,7 +167,7 @@ __global__ void ternary_rotate_inverse_inplace_bf16_kernel(__nv_bfloat16* __rest
 #pragma unroll
     for (int r = 0; r < 32; ++r) {
         const float value = __fmul_rn(values[r], signs_row[r * 32 + lane]);
-        base[(block << 10) + r * 32 + lane] = __float2bfloat16_rn(value);
+        base[(block << 10) + r * 32 + lane] = ninfer_float_to_bf16(value);
     }
 }
 

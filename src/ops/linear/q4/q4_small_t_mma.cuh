@@ -244,15 +244,15 @@ __launch_bounds__(256, 6) __global__
             if constexpr (std::is_same_v<Epilogue, Q4SmallTMmaStoreEpilogue>) {
                 if (col0 < live_columns) {
                     out[static_cast<std::int64_t>(col0) * Geometry::kOutputRows + row0 + gid] =
-                        __float2bfloat16_rn(sum.x);
+                        ninfer_float_to_bf16(sum.x);
                     out[static_cast<std::int64_t>(col0) * Geometry::kOutputRows + row0 + gid + 8] =
-                        __float2bfloat16_rn(sum.z);
+                        ninfer_float_to_bf16(sum.z);
                 }
                 if (col0 + 1 < live_columns) {
                     out[static_cast<std::int64_t>(col0 + 1) * Geometry::kOutputRows + row0 + gid] =
-                        __float2bfloat16_rn(sum.y);
+                        ninfer_float_to_bf16(sum.y);
                     out[static_cast<std::int64_t>(col0 + 1) * Geometry::kOutputRows + row0 + gid +
-                        8] = __float2bfloat16_rn(sum.w);
+                        8] = ninfer_float_to_bf16(sum.w);
                 }
             } else {
                 epilogue.template store<ActiveCols>(row0 + gid, col0, sum);

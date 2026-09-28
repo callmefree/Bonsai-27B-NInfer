@@ -9,6 +9,7 @@
 // row.col MMA atom. M and K come from a compiled geometry; N remains runtime.
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -86,7 +87,7 @@ struct Bf16MmaOutputTile {
 
     __device__ __forceinline__ void store(std::int32_t parent_row, std::int32_t token,
                                           float value) const {
-        *at(parent_row, token) = __float2bfloat16_rn(value);
+        *at(parent_row, token) = ninfer_float_to_bf16(value);
     }
 };
 

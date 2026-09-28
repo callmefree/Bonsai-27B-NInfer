@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/pdl.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/common/warp.cuh"
 #include "ops/linear/q4/q4_rowsplit_storage.cuh"
@@ -384,12 +385,12 @@ __device__ __forceinline__ void q4_gemv_store(__nv_bfloat16* out, __nv_bfloat16*
                                               int output_row, float value) {
     if constexpr (SplitOutput) {
         if (output_row < SplitRow) {
-            out[output_row] = __float2bfloat16(value);
+            out[output_row] = ninfer_float_to_bf16(value);
         } else {
-            out_tail[output_row - SplitRow] = __float2bfloat16(value);
+            out_tail[output_row - SplitRow] = ninfer_float_to_bf16(value);
         }
     } else {
-        out[output_row] = __float2bfloat16(value);
+        out[output_row] = ninfer_float_to_bf16(value);
     }
 }
 

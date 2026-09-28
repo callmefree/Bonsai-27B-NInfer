@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/bf16_vector.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/linear_attention/gated_delta_net/common.cuh"
 #include "ops/linear_attention/gated_delta_net/launch.h"
 
@@ -76,7 +77,7 @@ __device__ __forceinline__ void normalize_qk_lane(float (&value)[kQkPerLane], in
 
 __device__ __forceinline__ RawValueLane load_value_lane(const __nv_bfloat16* base, int lane,
                                                         std::uint32_t dv_base) {
-    RawValueLane out{__float2bfloat16(0.0f), 0.0f};
+    RawValueLane out{ninfer_float_to_bf16(0.0f), 0.0f};
     if (lane < kDvPerWarp) {
         out.bits  = base[dv_base + lane];
         out.value = __bfloat162float(out.bits);
@@ -133,7 +134,7 @@ __device__ __forceinline__ void readout_and_store(float (&state)[kDvPerWarp][kQk
         partial = warp_sum<kWarpSize>(partial);
         if (lane == r) { attn_val = partial; }
     }
-    if (lane < kDvPerWarp) { output[dv_base + lane] = __float2bfloat16(attn_val * scale); }
+    if (lane < kDvPerWarp) { output[dv_base + lane] = ninfer_float_to_bf16(attn_val * scale); }
 }
 
 struct RecurrentCoordinates {
@@ -640,7 +641,7 @@ __device__ __forceinline__ void zero_output_suffix(const Access& access,
                                                    std::int32_t valid, std::int32_t width) {
     if (coord.lane < kDvPerWarp) {
         for (std::int32_t token = valid; token < width; ++token) {
-            access.output_ptr(coord, token)[coord.dv_base + coord.lane] = __float2bfloat16(0.0f);
+            access.output_ptr(coord, token)[coord.dv_base + coord.lane] = ninfer_float_to_bf16(0.0f);
         }
     }
 }

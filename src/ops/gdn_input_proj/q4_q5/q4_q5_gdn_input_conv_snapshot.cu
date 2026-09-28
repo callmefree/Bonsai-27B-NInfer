@@ -1,4 +1,5 @@
 #include "ops/gdn_input_proj/q4_q5/q4_q5_gdn_input_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "core/pdl.cuh"
@@ -100,7 +101,7 @@ struct Q5GdnDecodeEpilogue {
             const float projected[1]{value};
             conv.store(row, projected);
         } else {
-            z[row - kValueRows] = __float2bfloat16_rn(value);
+            z[row - kValueRows] = ninfer_float_to_bf16(value);
         }
     }
 };
@@ -121,7 +122,7 @@ struct Q5GdnSmallTEpilogue {
 #pragma unroll
             for (int token = 0; token < Tokens; ++token) {
                 z[static_cast<std::int64_t>(token) * kZRows + row - kValueRows] =
-                    __float2bfloat16_rn(values[token]);
+                    ninfer_float_to_bf16(values[token]);
             }
         }
     }

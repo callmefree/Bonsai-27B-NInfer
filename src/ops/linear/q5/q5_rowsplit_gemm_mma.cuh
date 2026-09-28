@@ -426,10 +426,10 @@ void q5_rowsplit_gemm_mma_kernel(
                 const int local_col0 = warp_col * WN + ni * 8 + 2 * mma_col;
                 const int local_col1 = local_col0 + 1;
                 const float* values  = accum[mi][ni];
-                projected_shared[local_col0 * BM + local_row0] = __float2bfloat16_rn(values[0]);
-                projected_shared[local_col1 * BM + local_row0] = __float2bfloat16_rn(values[1]);
-                projected_shared[local_col0 * BM + local_row1] = __float2bfloat16_rn(values[2]);
-                projected_shared[local_col1 * BM + local_row1] = __float2bfloat16_rn(values[3]);
+                projected_shared[local_col0 * BM + local_row0] = ninfer_float_to_bf16(values[0]);
+                projected_shared[local_col1 * BM + local_row0] = ninfer_float_to_bf16(values[1]);
+                projected_shared[local_col0 * BM + local_row1] = ninfer_float_to_bf16(values[2]);
+                projected_shared[local_col1 * BM + local_row1] = ninfer_float_to_bf16(values[3]);
             }
         }
         __syncthreads();
@@ -481,7 +481,7 @@ void q5_rowsplit_gemm_mma_kernel(
                         if (row + i < rows) {
                             const std::int64_t index =
                                 static_cast<std::int64_t>(col) * rows + row + i;
-                            out[index] = __float2bfloat16_rn(
+                            out[index] = ninfer_float_to_bf16(
                                 __bfloat162float(out[index]) +
                                 __bfloat162float(projected_shared[local_col * BM + local_row + i]));
                         }
@@ -503,7 +503,7 @@ void q5_rowsplit_gemm_mma_kernel(
                     if constexpr (Epilogue == Q5MmaEpilogue::AddResidual) {
                         value = __bfloat162float(residual[index]) + value;
                     }
-                    out[index] = __float2bfloat16_rn(value);
+                    out[index] = ninfer_float_to_bf16(value);
                 };
                 if constexpr (kFull) {
                     store_value(static_cast<std::int64_t>(output_col0) * rows + output_row0,

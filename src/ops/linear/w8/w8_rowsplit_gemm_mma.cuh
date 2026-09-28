@@ -297,29 +297,29 @@ __global__ __launch_bounds__(Cfg::THREADS, Cfg::MIN_BLOCKS) void w8_rowsplit_gem
                     const float* up_acc   = acc[mi + kGateMt][ni];
                     if constexpr (Full) {
                         *output_tile.at(r0, c0) =
-                            __float2bfloat16_rn(silu(gate_acc[0]) * up_acc[0]);
+                            ninfer_float_to_bf16(silu(gate_acc[0]) * up_acc[0]);
                         *output_tile.at(r0, c1) =
-                            __float2bfloat16_rn(silu(gate_acc[1]) * up_acc[1]);
+                            ninfer_float_to_bf16(silu(gate_acc[1]) * up_acc[1]);
                         *output_tile.at(r1, c0) =
-                            __float2bfloat16_rn(silu(gate_acc[2]) * up_acc[2]);
+                            ninfer_float_to_bf16(silu(gate_acc[2]) * up_acc[2]);
                         *output_tile.at(r1, c1) =
-                            __float2bfloat16_rn(silu(gate_acc[3]) * up_acc[3]);
+                            ninfer_float_to_bf16(silu(gate_acc[3]) * up_acc[3]);
                     } else {
                         if (r0 < m / 2 && c0 < n) {
                             *output_tile.at(r0, c0) =
-                                __float2bfloat16_rn(silu(gate_acc[0]) * up_acc[0]);
+                                ninfer_float_to_bf16(silu(gate_acc[0]) * up_acc[0]);
                         }
                         if (r0 < m / 2 && c1 < n) {
                             *output_tile.at(r0, c1) =
-                                __float2bfloat16_rn(silu(gate_acc[1]) * up_acc[1]);
+                                ninfer_float_to_bf16(silu(gate_acc[1]) * up_acc[1]);
                         }
                         if (r1 < m / 2 && c0 < n) {
                             *output_tile.at(r1, c0) =
-                                __float2bfloat16_rn(silu(gate_acc[2]) * up_acc[2]);
+                                ninfer_float_to_bf16(silu(gate_acc[2]) * up_acc[2]);
                         }
                         if (r1 < m / 2 && c1 < n) {
                             *output_tile.at(r1, c1) =
-                                __float2bfloat16_rn(silu(gate_acc[3]) * up_acc[3]);
+                                ninfer_float_to_bf16(silu(gate_acc[3]) * up_acc[3]);
                         }
                     }
                 }
@@ -367,26 +367,26 @@ __global__ __launch_bounds__(Cfg::THREADS, Cfg::MIN_BLOCKS) void w8_rowsplit_gem
                         const float up10      = up_shared[local_r1 * BN + local_c0];
                         const float up11      = up_shared[local_r1 * BN + local_c1];
                         if constexpr (Full) {
-                            *output_tile.at(r0, c0) = __float2bfloat16_rn(silu(gate_acc[0]) * up00);
-                            *output_tile.at(r0, c1) = __float2bfloat16_rn(silu(gate_acc[1]) * up01);
-                            *output_tile.at(r1, c0) = __float2bfloat16_rn(silu(gate_acc[2]) * up10);
-                            *output_tile.at(r1, c1) = __float2bfloat16_rn(silu(gate_acc[3]) * up11);
+                            *output_tile.at(r0, c0) = ninfer_float_to_bf16(silu(gate_acc[0]) * up00);
+                            *output_tile.at(r0, c1) = ninfer_float_to_bf16(silu(gate_acc[1]) * up01);
+                            *output_tile.at(r1, c0) = ninfer_float_to_bf16(silu(gate_acc[2]) * up10);
+                            *output_tile.at(r1, c1) = ninfer_float_to_bf16(silu(gate_acc[3]) * up11);
                         } else {
                             if (r0 < m / 2 && c0 < n) {
                                 *output_tile.at(r0, c0) =
-                                    __float2bfloat16_rn(silu(gate_acc[0]) * up00);
+                                    ninfer_float_to_bf16(silu(gate_acc[0]) * up00);
                             }
                             if (r0 < m / 2 && c1 < n) {
                                 *output_tile.at(r0, c1) =
-                                    __float2bfloat16_rn(silu(gate_acc[1]) * up01);
+                                    ninfer_float_to_bf16(silu(gate_acc[1]) * up01);
                             }
                             if (r1 < m / 2 && c0 < n) {
                                 *output_tile.at(r1, c0) =
-                                    __float2bfloat16_rn(silu(gate_acc[2]) * up10);
+                                    ninfer_float_to_bf16(silu(gate_acc[2]) * up10);
                             }
                             if (r1 < m / 2 && c1 < n) {
                                 *output_tile.at(r1, c1) =
-                                    __float2bfloat16_rn(silu(gate_acc[3]) * up11);
+                                    ninfer_float_to_bf16(silu(gate_acc[3]) * up11);
                             }
                         }
                     }
@@ -407,10 +407,10 @@ __global__ __launch_bounds__(Cfg::THREADS, Cfg::MIN_BLOCKS) void w8_rowsplit_gem
                 const int local_c0                         = wn * WN + ni * 8 + 2 * lid;
                 const int local_c1                         = local_c0 + 1;
                 const float* a                             = acc[mi][ni];
-                projected_shared[local_c0 * BM + local_r0] = __float2bfloat16_rn(a[0]);
-                projected_shared[local_c1 * BM + local_r0] = __float2bfloat16_rn(a[1]);
-                projected_shared[local_c0 * BM + local_r1] = __float2bfloat16_rn(a[2]);
-                projected_shared[local_c1 * BM + local_r1] = __float2bfloat16_rn(a[3]);
+                projected_shared[local_c0 * BM + local_r0] = ninfer_float_to_bf16(a[0]);
+                projected_shared[local_c1 * BM + local_r0] = ninfer_float_to_bf16(a[1]);
+                projected_shared[local_c0 * BM + local_r1] = ninfer_float_to_bf16(a[2]);
+                projected_shared[local_c1 * BM + local_r1] = ninfer_float_to_bf16(a[3]);
             }
         }
         __syncthreads();
@@ -454,7 +454,7 @@ __global__ __launch_bounds__(Cfg::THREADS, Cfg::MIN_BLOCKS) void w8_rowsplit_gem
                     for (int i = 0; i < kRowsPerPack; ++i) {
                         if (row + i < m) {
                             __nv_bfloat16* destination = output_tile.at(row + i, col);
-                            *destination               = __float2bfloat16_rn(
+                            *destination               = ninfer_float_to_bf16(
                                 __bfloat162float(*destination) +
                                 __bfloat162float(projected_shared[local_col * BM + local_row + i]));
                         }
@@ -473,22 +473,22 @@ __global__ __launch_bounds__(Cfg::THREADS, Cfg::MIN_BLOCKS) void w8_rowsplit_gem
                 const int c1   = c0 + 1;
                 const float* a = acc[mi][ni];
                 if constexpr (Full) {
-                    *output_tile.at(r0, c0) = __float2bfloat16_rn(a[0]);
-                    *output_tile.at(r0, c1) = __float2bfloat16_rn(a[1]);
-                    *output_tile.at(r1, c0) = __float2bfloat16_rn(a[2]);
-                    *output_tile.at(r1, c1) = __float2bfloat16_rn(a[3]);
+                    *output_tile.at(r0, c0) = ninfer_float_to_bf16(a[0]);
+                    *output_tile.at(r0, c1) = ninfer_float_to_bf16(a[1]);
+                    *output_tile.at(r1, c0) = ninfer_float_to_bf16(a[2]);
+                    *output_tile.at(r1, c1) = ninfer_float_to_bf16(a[3]);
                 } else {
                     if (output_tile.valid(r0, m) && c0 < n) {
-                        *output_tile.at(r0, c0) = __float2bfloat16_rn(a[0]);
+                        *output_tile.at(r0, c0) = ninfer_float_to_bf16(a[0]);
                     }
                     if (output_tile.valid(r0, m) && c1 < n) {
-                        *output_tile.at(r0, c1) = __float2bfloat16_rn(a[1]);
+                        *output_tile.at(r0, c1) = ninfer_float_to_bf16(a[1]);
                     }
                     if (output_tile.valid(r1, m) && c0 < n) {
-                        *output_tile.at(r1, c0) = __float2bfloat16_rn(a[2]);
+                        *output_tile.at(r1, c0) = ninfer_float_to_bf16(a[2]);
                     }
                     if (output_tile.valid(r1, m) && c1 < n) {
-                        *output_tile.at(r1, c1) = __float2bfloat16_rn(a[3]);
+                        *output_tile.at(r1, c1) = ninfer_float_to_bf16(a[3]);
                     }
                 }
             }

@@ -24,3 +24,14 @@ __device__ __forceinline__ __nv_bfloat162 ninfer_f32x2_to_bf16x2_rn(float a, flo
     return *reinterpret_cast<const __nv_bfloat162*>(&packed);
 #endif
 }
+
+// Same problem for the single-element conversion: __float2bfloat16 also emits
+// cvt.rn.bf16x2.f32 on sm_75 under CUDA 13.x.
+__device__ __forceinline__ __nv_bfloat16 ninfer_float_to_bf16(float f) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
+    return __float2bfloat16(f);
+#else
+    const unsigned bits = ninfer_bf16_rne_bits(f);
+    return *reinterpret_cast<const __nv_bfloat16*>(&bits);
+#endif
+}

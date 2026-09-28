@@ -75,7 +75,7 @@ __launch_bounds__(512) __global__
     inv       = __shfl_sync(kFullWarpMask, inv, 0);
     for (std::int64_t i = lane; i < static_cast<std::int64_t>(d); i += kWarpSize) {
         const std::int64_t index = base + i;
-        out[index]               = __float2bfloat16_rn(__bfloat162float(x[index]) * inv);
+        out[index]               = ninfer_float_to_bf16(__bfloat162float(x[index]) * inv);
     }
 }
 

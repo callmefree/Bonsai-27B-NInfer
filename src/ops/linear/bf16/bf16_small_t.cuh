@@ -8,6 +8,7 @@
 // same computation body without a packed intermediate.
 
 #include "ops/linear/bf16/bf16_gemv.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
@@ -237,7 +238,7 @@ struct Bf16SmallTContiguousOutput {
     std::int32_t rows;
 
     __device__ __forceinline__ void store(std::int32_t row, std::int32_t token, float value) const {
-        data[static_cast<std::int64_t>(token) * rows + row] = __float2bfloat16_rn(value);
+        data[static_cast<std::int64_t>(token) * rows + row] = ninfer_float_to_bf16(value);
     }
 };
 

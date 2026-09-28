@@ -19,6 +19,7 @@
 // loads, so the kernel runs DRAM-bound instead of L1/LSU- or latency-bound.
 
 #include "core/pdl.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/math.h"
 #include "ops/common/memory.cuh"
 #include "ops/common/warp.cuh"
@@ -91,12 +92,12 @@ struct Q5GemvStoreEpilogue {
                                                float value) const {
         if constexpr (SplitOutput) {
             if (row < SplitRow) {
-                out[row] = __float2bfloat16_rn(value);
+                out[row] = ninfer_float_to_bf16(value);
             } else {
-                out_tail[row - SplitRow] = __float2bfloat16_rn(value);
+                out_tail[row - SplitRow] = ninfer_float_to_bf16(value);
             }
         } else {
-            out[row] = __float2bfloat16_rn(value);
+            out[row] = ninfer_float_to_bf16(value);
         }
     }
 };

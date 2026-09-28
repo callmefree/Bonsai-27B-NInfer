@@ -1,4 +1,5 @@
 #include "ops/linear_add/bf16/bf16_linear_add_plan.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/linear/bf16/bf16_config.h"
@@ -22,7 +23,7 @@ struct Bf16LinearAddSmallTOutput {
                                           float accumulator) const {
         __nv_bfloat16* destination = residual + static_cast<std::int64_t>(token) * rows + row;
         const float residual_value = __bfloat162float(*destination);
-        *destination               = __float2bfloat16_rn(accumulator + residual_value);
+        *destination               = ninfer_float_to_bf16(accumulator + residual_value);
     }
 };
 

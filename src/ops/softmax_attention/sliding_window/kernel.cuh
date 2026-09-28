@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/softmax_attention/common/context_query.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 namespace ninfer::ops {
 
@@ -97,7 +98,7 @@ __launch_bounds__(WarpsPerBlock * 32, 2) __global__
 #pragma unroll
         for (int item = 0; item < 4; ++item) {
             const int d                                  = lane + item * 32;
-            out[context_query_q_index(q_head, d, token)] = __float2bfloat16(0.0f);
+            out[context_query_q_index(q_head, d, token)] = ninfer_float_to_bf16(0.0f);
         }
         return;
     }
@@ -130,7 +131,7 @@ __launch_bounds__(WarpsPerBlock * 32, 2) __global__
                          weights[warp][split];
         }
         const float value = global_l > 0.0f ? numerator / global_l : 0.0f;
-        out[context_query_q_index(q_head, d, token)] = __float2bfloat16(value);
+        out[context_query_q_index(q_head, d, token)] = ninfer_float_to_bf16(value);
     }
 }
 

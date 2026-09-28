@@ -6,6 +6,7 @@
 // with FP32 accumulation. Split numerators remain FP32 through the reducer.
 
 #include "ops/kv_cache/fp8_e4m3_row_codec.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/kv_cache/hadamard_d256.cuh"
 #include "ops/softmax_attention/dense/causal_cache/small_t.cuh"
 
@@ -613,7 +614,7 @@ __launch_bounds__(256) __global__ void causal_attention_small_t_fp8_reduce_outpu
         if (absolute_column >= valid_columns[batch]) {
             if (tid < DChunk && d_start + tid < kCausalHeadDim)
                 out[causal_q_index<Geometry>(q_head, d_start + tid, output_column)] =
-                    __float2bfloat16(0.0f);
+                    ninfer_float_to_bf16(0.0f);
             return;
         }
     }
@@ -641,7 +642,7 @@ __launch_bounds__(256) __global__ void causal_attention_small_t_fp8_reduce_outpu
     }
 
     const float value = head_l > 0.0F ? numerator / head_l : 0.0F;
-    out[causal_q_index<Geometry>(q_head, d, output_column)] = __float2bfloat16(value);
+    out[causal_q_index<Geometry>(q_head, d, output_column)] = ninfer_float_to_bf16(value);
 }
 
 } // namespace ninfer::ops

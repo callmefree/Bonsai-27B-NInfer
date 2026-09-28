@@ -6,6 +6,7 @@
 // No complete K/V/P tensor is materialized outside the CTA.
 
 #include "ops/common/mbarrier.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/kv_cache/hadamard_d256.cuh"
 #include "ops/kv_cache/nvfp4_group16_codec.cuh"
 #include "ops/softmax_attention/dense/causal_cache/prompt_common.cuh"
@@ -402,7 +403,7 @@ __launch_bounds__(kCausalPromptNvfp4Threads, 1) void causal_attention_prompt_nvf
 #pragma unroll
         for (int r = 0; r < 8; ++r) {
             const int d                                               = lane + 32 * r;
-            out[causal_prompt_q_index<Geometry>(q_head, d, q0 + row)] = __float2bfloat16(values[r]);
+            out[causal_prompt_q_index<Geometry>(q_head, d, q0 + row)] = ninfer_float_to_bf16(values[r]);
         }
     }
     causal_prompt_zero_output_rows<Geometry>(out, q_head, tokens, min(q0 + Br, width), consumer_tid,

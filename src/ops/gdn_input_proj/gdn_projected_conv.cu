@@ -1,4 +1,5 @@
 #include "ops/gdn_input_proj/gdn_projected_conv.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/gdn_input_proj/gdn_conv.cuh"
@@ -41,11 +42,11 @@ __global__ void gdn_projected_conv_kernel(
         const std::int64_t column = static_cast<std::int64_t>(batch) * width + token;
         if (token >= valid) {
             if (row < QueryRows) {
-                query[column * QueryRows + row] = __float2bfloat16_rn(0.0F);
+                query[column * QueryRows + row] = ninfer_float_to_bf16(0.0F);
             } else if (row < QueryRows + KeyRows) {
-                key[column * KeyRows + row - QueryRows] = __float2bfloat16_rn(0.0F);
+                key[column * KeyRows + row - QueryRows] = ninfer_float_to_bf16(0.0F);
             } else {
-                value[column * ValueRows + row - QueryRows - KeyRows] = __float2bfloat16_rn(0.0F);
+                value[column * ValueRows + row - QueryRows - KeyRows] = ninfer_float_to_bf16(0.0F);
             }
             continue;
         }
@@ -55,7 +56,7 @@ __global__ void gdn_projected_conv_kernel(
         conv                       = fmaf(w1, s1, conv);
         conv                       = fmaf(w2, s2, conv);
         conv                       = fmaf(w3, p, conv);
-        const __nv_bfloat16 output = __float2bfloat16_rn(silu(conv));
+        const __nv_bfloat16 output = ninfer_float_to_bf16(silu(conv));
         if (row < QueryRows) {
             query[column * QueryRows + row] = output;
         } else if (row < QueryRows + KeyRows) {

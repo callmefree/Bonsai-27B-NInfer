@@ -26,6 +26,7 @@
 // (column, 0) at column, and a one-token output row is simply out[row].
 
 #include <cuda_bf16.h>
+#include "ops/common/bf16_compat.cuh"
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
@@ -94,7 +95,7 @@ void ternary_pq2_gemv_kernel(const __nv_bfloat16* __restrict__ x,
     for (int offset = 16; offset > 0; offset >>= 1) {
         accumulator += __shfl_down_sync(0xffffffffu, accumulator, offset);
     }
-    if (lane == 0) { out[warp] = __float2bfloat16_rn(accumulator); }
+    if (lane == 0) { out[warp] = ninfer_float_to_bf16(accumulator); }
 }
 
 // Small-token-tile variant, for the speculative VERIFY pass (T = draft + 1, i.e. 2..4).
@@ -163,7 +164,7 @@ void ternary_pq2_gemv_tile_kernel(const __nv_bfloat16* __restrict__ x,
         if (lane == 0 && t < tokens) {
             // Token-major output: element (row, token) lives at token * out_row_stride + row.
             out[static_cast<std::int64_t>(t) * out_row_stride + warp] =
-                __float2bfloat16_rn(value);
+                ninfer_float_to_bf16(value);
         }
     }
 }
@@ -299,7 +300,7 @@ void ternary_pq2_gemv_tile_block_kernel(const __nv_bfloat16* __restrict__ x,
             if (lane == 0 && active) {
                 // Row order inside the CTA matches the global row order: warp_in_block owns rows
                 // [warp_in_block*kR, ...) of the block's contiguous range.
-                staged[t][warp_in_block * kR + r] = __float2bfloat16_rn(value);
+                staged[t][warp_in_block * kR + r] = ninfer_float_to_bf16(value);
             }
         }
     }

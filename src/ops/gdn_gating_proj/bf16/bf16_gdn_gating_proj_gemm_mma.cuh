@@ -371,7 +371,7 @@ __global__ __launch_bounds__(Warps * 32, 1) void bf16_gdn_gating_proj_gemm_mma_k
                 const float inv    = rsqrtf(sum / static_cast<float>(kBf16GdnHidden) + norm_eps);
                 const float value  = __bfloat162float(x[i]);
                 const float weight = __bfloat162float(norm_weight[k]);
-                normalized_x[i]    = __float2bfloat16_rn(value * inv * (1.0F + weight));
+                normalized_x[i]    = ninfer_float_to_bf16(value * inv * (1.0F + weight));
             }
         }
         for (int i = block_linear * kThreads + tid; i < elems; i += grid_threads) {

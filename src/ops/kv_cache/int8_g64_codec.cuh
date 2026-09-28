@@ -5,6 +5,7 @@
 // standalone transcode kernel in the production path.
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/kernel/paged_kv_address.cuh"
 #include "ops/kv_cache/hadamard_d256.cuh"
@@ -153,8 +154,8 @@ __global__ void kv_cache_inverse_rotate_output_kernel(__nv_bfloat16* output, int
     float x0 = __bfloat162float(output[base + d0]);
     float x1 = __bfloat162float(output[base + d1]);
     kv_cache_hadamard64(x0, x1);
-    output[base + d0] = __float2bfloat16(x0);
-    output[base + d1] = __float2bfloat16(x1);
+    output[base + d0] = ninfer_float_to_bf16(x0);
+    output[base + d1] = ninfer_float_to_bf16(x1);
 }
 
 __device__ __forceinline__ void kv_cache_unpack_i4x16(const std::uint8_t* src8,

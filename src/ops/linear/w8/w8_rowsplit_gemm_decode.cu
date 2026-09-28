@@ -1,4 +1,5 @@
 #include "ops/linear/w8/w8_launch.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/common/math.cuh"
@@ -70,7 +71,7 @@ __global__ __launch_bounds__(RowsPerCta * 32, 2) void w8_rowsplit_k16384_decode_
     }
 
     acc = warp_reduce_sum(acc);
-    if (lane == 0) { out[row] = __float2bfloat16_rn(acc); }
+    if (lane == 0) { out[row] = ninfer_float_to_bf16(acc); }
 }
 
 template <int RowsPerCta>

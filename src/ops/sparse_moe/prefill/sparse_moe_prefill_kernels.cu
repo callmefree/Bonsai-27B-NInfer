@@ -527,15 +527,15 @@ __global__ __launch_bounds__(ExpertWarps * 32, 3) void sparse_moe_prefill_q4_gat
                     const int local_col1 = local_col0 + 1;
                     if (local_col0 < cols) {
                         activation[static_cast<std::int64_t>(col0) * kIntermediate + row0] =
-                            __float2bfloat16_rn(silu(acc[mi][ni][0]) * acc[mi + 2][ni][0]);
+                            ninfer_float_to_bf16(silu(acc[mi][ni][0]) * acc[mi + 2][ni][0]);
                         activation[static_cast<std::int64_t>(col0) * kIntermediate + row1] =
-                            __float2bfloat16_rn(silu(acc[mi][ni][2]) * acc[mi + 2][ni][2]);
+                            ninfer_float_to_bf16(silu(acc[mi][ni][2]) * acc[mi + 2][ni][2]);
                     }
                     if (local_col1 < cols) {
                         activation[static_cast<std::int64_t>(col1) * kIntermediate + row0] =
-                            __float2bfloat16_rn(silu(acc[mi][ni][1]) * acc[mi + 2][ni][1]);
+                            ninfer_float_to_bf16(silu(acc[mi][ni][1]) * acc[mi + 2][ni][1]);
                         activation[static_cast<std::int64_t>(col1) * kIntermediate + row1] =
-                            __float2bfloat16_rn(silu(acc[mi][ni][3]) * acc[mi + 2][ni][3]);
+                            ninfer_float_to_bf16(silu(acc[mi][ni][3]) * acc[mi + 2][ni][3]);
                     }
                 }
             }
@@ -717,15 +717,15 @@ __global__ __launch_bounds__(kExpertThreads, 1) void sparse_moe_prefill_w8_gate_
                 const int local_col1 = local_col0 + 1;
                 if (local_col0 < cols) {
                     activation[static_cast<std::int64_t>(col0) * kIntermediate + row0] =
-                        __float2bfloat16_rn(silu(acc[mi][0]) * acc[mi + 2][0]);
+                        ninfer_float_to_bf16(silu(acc[mi][0]) * acc[mi + 2][0]);
                     activation[static_cast<std::int64_t>(col0) * kIntermediate + row1] =
-                        __float2bfloat16_rn(silu(acc[mi][2]) * acc[mi + 2][2]);
+                        ninfer_float_to_bf16(silu(acc[mi][2]) * acc[mi + 2][2]);
                 }
                 if (local_col1 < cols) {
                     activation[static_cast<std::int64_t>(col1) * kIntermediate + row0] =
-                        __float2bfloat16_rn(silu(acc[mi][1]) * acc[mi + 2][1]);
+                        ninfer_float_to_bf16(silu(acc[mi][1]) * acc[mi + 2][1]);
                     activation[static_cast<std::int64_t>(col1) * kIntermediate + row1] =
-                        __float2bfloat16_rn(silu(acc[mi][3]) * acc[mi + 2][3]);
+                        ninfer_float_to_bf16(silu(acc[mi][3]) * acc[mi + 2][3]);
                 }
             }
         }
@@ -917,15 +917,15 @@ __global__ __launch_bounds__(ExpertWarps * 32, 3) void sparse_moe_prefill_qx_dow
                 const int local_col1  = local_col0 + 1;
                 if (local_col0 < cols) {
                     output[static_cast<std::int64_t>(col0) * kHidden + output_row0] =
-                        __float2bfloat16_rn(acc[mi][0]);
+                        ninfer_float_to_bf16(acc[mi][0]);
                     output[static_cast<std::int64_t>(col0) * kHidden + output_row1] =
-                        __float2bfloat16_rn(acc[mi][2]);
+                        ninfer_float_to_bf16(acc[mi][2]);
                 }
                 if (local_col1 < cols) {
                     output[static_cast<std::int64_t>(col1) * kHidden + output_row0] =
-                        __float2bfloat16_rn(acc[mi][1]);
+                        ninfer_float_to_bf16(acc[mi][1]);
                     output[static_cast<std::int64_t>(col1) * kHidden + output_row1] =
-                        __float2bfloat16_rn(acc[mi][3]);
+                        ninfer_float_to_bf16(acc[mi][3]);
                 }
             }
         }
@@ -1106,7 +1106,7 @@ __global__ __launch_bounds__(kExpertThreads, 1) void sparse_moe_prefill_w8_down_
                 auto store            = [&](int col, int row, float value) {
                     if constexpr (Routed) {
                         grouped_output[static_cast<std::int64_t>(col) * kHidden + row] =
-                            __float2bfloat16_rn(value);
+                            ninfer_float_to_bf16(value);
                     } else {
                         const float merged =
                             __bfloat162float(
@@ -1114,7 +1114,7 @@ __global__ __launch_bounds__(kExpertThreads, 1) void sparse_moe_prefill_w8_down_
                             routed_sum[static_cast<std::int64_t>(col) * kHidden + row] +
                             shared_scale[col] * value;
                         destination[static_cast<std::int64_t>(col) * kHidden + row] =
-                            __float2bfloat16_rn(merged);
+                            ninfer_float_to_bf16(merged);
                     }
                 };
                 if (local_col0 < cols) {

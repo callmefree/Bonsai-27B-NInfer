@@ -1,4 +1,5 @@
 #include "ops/gdn_input_proj/nvfp4/nvfp4_gdn_snapshot_plan.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/gdn_input_proj/gdn_conv.cuh"
@@ -90,7 +91,7 @@ __global__ __launch_bounds__(WarpsPerCta * 32) void nvfp4_gdn_conv_post_kernel(
                 const std::int64_t projected_base = static_cast<std::int64_t>(token) * kGdnChannels;
                 if (token >= valid) {
                     output[static_cast<std::int64_t>(token) * output_rows + output_row] =
-                        __float2bfloat16_rn(0.0F);
+                        ninfer_float_to_bf16(0.0F);
                     continue;
                 }
                 const float p = __bfloat162float(projected[projected_base + row]);
@@ -99,7 +100,7 @@ __global__ __launch_bounds__(WarpsPerCta * 32) void nvfp4_gdn_conv_post_kernel(
                 conv          = fmaf(w2, s2, conv);
                 conv          = fmaf(w3, p, conv);
                 output[static_cast<std::int64_t>(token) * output_rows + output_row] =
-                    __float2bfloat16_rn(silu(conv));
+                    ninfer_float_to_bf16(silu(conv));
                 publish.publish(token, 0, row, s1, s2, p);
                 s0 = s1;
                 s1 = s2;

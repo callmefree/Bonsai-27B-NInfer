@@ -5,6 +5,7 @@
 // and reduce FP32 fragments in shared memory before the final BF16 store.
 
 #include "ops/common/math.h"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/common/mma.cuh"
 
@@ -212,7 +213,7 @@ __global__ __launch_bounds__(Schedule::kThreads, 1) void bf16_n256_k5120_mma_ker
             const auto store = [&](int local_row, int local_token, float value) {
                 if (local_token < tokens) {
                     out[static_cast<std::int64_t>(local_token) * kRows + row0 + local_row] =
-                        __float2bfloat16_rn(value);
+                        ninfer_float_to_bf16(value);
                 }
             };
             store(gid, token, sum.x);

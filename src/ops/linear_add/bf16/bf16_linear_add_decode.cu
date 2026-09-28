@@ -1,4 +1,5 @@
 #include "ops/linear_add/bf16/bf16_linear_add_plan.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/linear/bf16/bf16_gemv.cuh"
@@ -16,7 +17,7 @@ struct Bf16LinearAddDecodeEpilogue {
     __device__ __forceinline__ void operator()(const Bf16LinearAddDecodeOutput& output,
                                                std::int32_t row, float accumulator) const {
         const float residual = __bfloat162float(output.residual[row]);
-        output.residual[row] = __float2bfloat16_rn(accumulator + residual);
+        output.residual[row] = ninfer_float_to_bf16(accumulator + residual);
     }
 };
 

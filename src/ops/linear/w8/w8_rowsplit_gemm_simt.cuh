@@ -30,6 +30,7 @@
 // padded region [k, padded_k) are never used.
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/common/warp.cuh"
 #include "ops/linear/w8/w8_rowsplit_output.cuh"
@@ -240,7 +241,7 @@ __global__ void w8_rowsplit_gemm_simt_kernel(const __nv_bfloat16* __restrict__ x
             if constexpr (Epilogue == W8Epilogue::Residual) {
                 a = __bfloat162float(*destination) + a;
             }
-            *destination = __float2bfloat16_rn(a);
+            *destination = ninfer_float_to_bf16(a);
         }
     }
 }

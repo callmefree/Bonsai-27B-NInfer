@@ -251,22 +251,22 @@ __launch_bounds__((TileCols / 16) * 32, kW8PairMmaMinBlocks<TileCols>) void w8_p
                 const int c1   = c0 + 1;
                 const float* a = p == 0 ? acc_k[mi][ni] : acc_v[mi][ni];
                 if constexpr (Full) {
-                    out[static_cast<std::int64_t>(c0) * m + r0] = __float2bfloat16_rn(a[0]);
-                    out[static_cast<std::int64_t>(c1) * m + r0] = __float2bfloat16_rn(a[1]);
-                    out[static_cast<std::int64_t>(c0) * m + r1] = __float2bfloat16_rn(a[2]);
-                    out[static_cast<std::int64_t>(c1) * m + r1] = __float2bfloat16_rn(a[3]);
+                    out[static_cast<std::int64_t>(c0) * m + r0] = ninfer_float_to_bf16(a[0]);
+                    out[static_cast<std::int64_t>(c1) * m + r0] = ninfer_float_to_bf16(a[1]);
+                    out[static_cast<std::int64_t>(c0) * m + r1] = ninfer_float_to_bf16(a[2]);
+                    out[static_cast<std::int64_t>(c1) * m + r1] = ninfer_float_to_bf16(a[3]);
                 } else {
                     if (r0 < m && c0 < n) {
-                        out[static_cast<std::int64_t>(c0) * m + r0] = __float2bfloat16_rn(a[0]);
+                        out[static_cast<std::int64_t>(c0) * m + r0] = ninfer_float_to_bf16(a[0]);
                     }
                     if (r0 < m && c1 < n) {
-                        out[static_cast<std::int64_t>(c1) * m + r0] = __float2bfloat16_rn(a[1]);
+                        out[static_cast<std::int64_t>(c1) * m + r0] = ninfer_float_to_bf16(a[1]);
                     }
                     if (r1 < m && c0 < n) {
-                        out[static_cast<std::int64_t>(c0) * m + r1] = __float2bfloat16_rn(a[2]);
+                        out[static_cast<std::int64_t>(c0) * m + r1] = ninfer_float_to_bf16(a[2]);
                     }
                     if (r1 < m && c1 < n) {
-                        out[static_cast<std::int64_t>(c1) * m + r1] = __float2bfloat16_rn(a[3]);
+                        out[static_cast<std::int64_t>(c1) * m + r1] = ninfer_float_to_bf16(a[3]);
                     }
                 }
             }

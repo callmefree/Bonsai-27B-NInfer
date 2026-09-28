@@ -1,4 +1,5 @@
 #include "ops/linear_pair/w8/w8_pair_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/common/math.cuh"
@@ -87,8 +88,8 @@ __global__ __launch_bounds__(RowsPerCta * 32, 2) void w8_pair_k2048_decode_kerne
     acc_a = warp_reduce_sum(acc_a);
     acc_b = warp_reduce_sum(acc_b);
     if (lane == 0) {
-        first_out[row]  = __float2bfloat16_rn(acc_a);
-        second_out[row] = __float2bfloat16_rn(acc_b);
+        first_out[row]  = ninfer_float_to_bf16(acc_a);
+        second_out[row] = ninfer_float_to_bf16(acc_b);
     }
 }
 

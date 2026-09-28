@@ -15,6 +15,7 @@
 // groups do not form or read an activation address.
 
 #include "ops/common/memory.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/warp.cuh"
 #include "ops/linear/q6/q6_rowsplit_storage.cuh"
 
@@ -275,7 +276,7 @@ __global__ __launch_bounds__(
         if (col < active_cols) {
             const float sum = warp_reduce_sum(acc[col]);
             if (lane == 0) {
-                out[static_cast<std::int64_t>(col0 + col) * rows + row] = __float2bfloat16(sum);
+                out[static_cast<std::int64_t>(col0 + col) * rows + row] = ninfer_float_to_bf16(sum);
             }
         }
     }

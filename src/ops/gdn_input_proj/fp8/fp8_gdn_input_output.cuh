@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/memory.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -29,7 +30,7 @@ struct Fp8GdnInputOutput {
 
     __device__ __forceinline__ void store(std::int32_t parent_row, std::int32_t token,
                                           float value) const {
-        *destination(parent_row, token) = __float2bfloat16_rn(value);
+        *destination(parent_row, token) = ninfer_float_to_bf16(value);
     }
 
     __device__ __forceinline__ void store_vector(std::int32_t parent_row, std::int32_t token,

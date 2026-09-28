@@ -1,4 +1,5 @@
 #include "ops/dynamic_grouped_conv/bf16/bf16_dynamic_grouped_conv_prepare_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 #include "core/device.h"
 #include <cuda_bf16.h>
 
@@ -29,7 +30,7 @@ __global__ __launch_bounds__(Capacity * 16, 4) void dynamic_grouped_conv_prepare
     if (tid < 2 * Capacity && tid % Capacity < width) {
         const int tap = tid / Capacity, pos = tid % Capacity;
         finish[((batch * width + pos) * 2 + tap) * 320 + group] =
-            __float2bfloat16_rn(projected[2 + tap][pos]);
+            ninfer_float_to_bf16(projected[2 + tap][pos]);
     }
     if (position < width) {
         float value = (__bfloat162float(base[hidden]) + projected[0][position]) *
@@ -37,7 +38,7 @@ __global__ __launch_bounds__(Capacity * 16, 4) void dynamic_grouped_conv_prepare
         if (position > 0)
             value = fmaf(__bfloat162float(base[5120 + hidden]) + projected[1][position],
                          normalized[position - 1][channel], value);
-        prepared[offset] = __float2bfloat16_rn(value);
+        prepared[offset] = ninfer_float_to_bf16(value);
     }
 }
 

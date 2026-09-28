@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/common/warp.cuh"
 #include "ops/linear/w8/w8_rowsplit_output.cuh"
@@ -16,7 +17,7 @@ struct W8DecodeStoreEpilogue {
     template <class Output>
     __device__ __forceinline__ void operator()(const Output& output, std::int32_t cta_row0,
                                                std::int32_t row, float accumulator) const {
-        *output.tile(cta_row0).at(row, 0) = __float2bfloat16_rn(accumulator);
+        *output.tile(cta_row0).at(row, 0) = ninfer_float_to_bf16(accumulator);
     }
 };
 

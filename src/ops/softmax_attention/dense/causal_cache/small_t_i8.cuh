@@ -26,6 +26,7 @@
 // helpers, the s8/bf16 MMA helpers, the reducer) lives in small_t.cuh.
 
 #include <cuda_bf16.h>
+#include "ops/common/bf16_compat.cuh"
 #include <cuda_fp16.h>
 #include <math_constants.h>
 
@@ -598,10 +599,10 @@ __launch_bounds__(WarpsPerCta * 32, MinBlocksPerSm) __global__
                                       : 0.0f;
                 bl0 += p00 + p01;
                 bl1 += p10 + p11;
-                p_sw[gid * Bc + causal_small_t_tc_swz32(gid, col0)]           = __float2bfloat16(p00);
-                p_sw[gid * Bc + causal_small_t_tc_swz32(gid, col1)]           = __float2bfloat16(p01);
-                p_sw[(gid + 8) * Bc + causal_small_t_tc_swz32(gid + 8, col0)] = __float2bfloat16(p10);
-                p_sw[(gid + 8) * Bc + causal_small_t_tc_swz32(gid + 8, col1)] = __float2bfloat16(p11);
+                p_sw[gid * Bc + causal_small_t_tc_swz32(gid, col0)]           = ninfer_float_to_bf16(p00);
+                p_sw[gid * Bc + causal_small_t_tc_swz32(gid, col1)]           = ninfer_float_to_bf16(p01);
+                p_sw[(gid + 8) * Bc + causal_small_t_tc_swz32(gid + 8, col0)] = ninfer_float_to_bf16(p10);
+                p_sw[(gid + 8) * Bc + causal_small_t_tc_swz32(gid + 8, col1)] = ninfer_float_to_bf16(p11);
             }
             bl0 = warp_sum<4>(bl0, FullMask);
             bl1 = warp_sum<4>(bl1, FullMask);

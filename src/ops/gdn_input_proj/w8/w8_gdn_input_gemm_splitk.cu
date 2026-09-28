@@ -1,4 +1,5 @@
 #include "ops/gdn_input_proj/w8/w8_gdn_input_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/common/mma.cuh"
@@ -42,7 +43,7 @@ struct W8GdnSplitKConvEpilogue {
 #pragma unroll
             for (int token = 0; token < ActiveCols; ++token) {
                 z[static_cast<std::int64_t>(token) * 4096 + row - 8192] =
-                    __float2bfloat16_rn(projected[token]);
+                    ninfer_float_to_bf16(projected[token]);
             }
         }
     }
@@ -261,12 +262,12 @@ __launch_bounds__(KSplits* NGroups * 32, MinBlocks) void w8_gdn_input_medium_t_s
         for (int ni = 0; ni < kNt; ++ni) {
             const int col0 = n_base + ni * 8 + 2 * lid;
             if (col0 < active_cols) {
-                *output_tile.at(cta_row0 + gid, col0)     = __float2bfloat16_rn(acc[ni][0]);
-                *output_tile.at(cta_row0 + gid + 8, col0) = __float2bfloat16_rn(acc[ni][2]);
+                *output_tile.at(cta_row0 + gid, col0)     = ninfer_float_to_bf16(acc[ni][0]);
+                *output_tile.at(cta_row0 + gid + 8, col0) = ninfer_float_to_bf16(acc[ni][2]);
             }
             if (col0 + 1 < active_cols) {
-                *output_tile.at(cta_row0 + gid, col0 + 1)     = __float2bfloat16_rn(acc[ni][1]);
-                *output_tile.at(cta_row0 + gid + 8, col0 + 1) = __float2bfloat16_rn(acc[ni][3]);
+                *output_tile.at(cta_row0 + gid, col0 + 1)     = ninfer_float_to_bf16(acc[ni][1]);
+                *output_tile.at(cta_row0 + gid + 8, col0 + 1) = ninfer_float_to_bf16(acc[ni][3]);
             }
         }
     }

@@ -1,4 +1,5 @@
 #include "ops/linear_pair/w8/w8_pair_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/linear_pair/w8/w8_pair_plan.h"
 
 #include "core/device.h"
@@ -50,8 +51,8 @@ struct W8PairExactTEpilogue {
                 __shfl_sync(kPairMask, projected[token], (lane & (kRowsPerCta - 1)) + kRowsPerCta);
             if (lane < kRowsPerCta) {
                 const std::int64_t offset = static_cast<std::int64_t>(token) * kRows + output_row;
-                first[offset]             = __float2bfloat16_rn(projected[token]);
-                second[offset]            = __float2bfloat16_rn(second_value);
+                first[offset]             = ninfer_float_to_bf16(projected[token]);
+                second[offset]            = ninfer_float_to_bf16(second_value);
             }
         }
     }

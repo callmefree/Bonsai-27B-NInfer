@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/common/math.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 
@@ -18,9 +19,9 @@ struct SnapshotHistoryPublish {
         const std::int64_t slot_stride = static_cast<std::int64_t>(channels) * 3;
         const std::int64_t base =
             static_cast<std::int64_t>(snapshot_base_slots[batch] + token) * slot_stride;
-        state_write[base + row]                  = __float2bfloat16_rn(s1);
-        state_write[base + channels + row]       = __float2bfloat16_rn(s2);
-        state_write[base + 2LL * channels + row] = __float2bfloat16_rn(p);
+        state_write[base + row]                  = ninfer_float_to_bf16(s1);
+        state_write[base + channels + row]       = ninfer_float_to_bf16(s2);
+        state_write[base + 2LL * channels + row] = ninfer_float_to_bf16(p);
     }
 };
 
@@ -32,7 +33,7 @@ struct RecordColumnPublish {
     __device__ __forceinline__ void publish(std::int32_t token, std::int32_t batch,
                                             std::int32_t row, float, float, float p) const {
         const std::int64_t column       = static_cast<std::int64_t>(batch) * width + token;
-        record[column * channels + row] = __float2bfloat16_rn(p);
+        record[column * channels + row] = ninfer_float_to_bf16(p);
     }
 };
 
@@ -86,12 +87,12 @@ struct GdnConvEpilogue {
             const std::int64_t column = static_cast<std::int64_t>(batch_row) * width + token;
             if (token >= valid) {
                 if (row < query_rows) {
-                    query[column * query_rows + row] = __float2bfloat16_rn(0.0F);
+                    query[column * query_rows + row] = ninfer_float_to_bf16(0.0F);
                 } else if (row < query_rows + key_rows) {
-                    key[column * key_rows + row - query_rows] = __float2bfloat16_rn(0.0F);
+                    key[column * key_rows + row - query_rows] = ninfer_float_to_bf16(0.0F);
                 } else {
                     value[column * value_rows + row - query_rows - key_rows] =
-                        __float2bfloat16_rn(0.0F);
+                        ninfer_float_to_bf16(0.0F);
                 }
                 continue;
             }
@@ -101,7 +102,7 @@ struct GdnConvEpilogue {
             conv                       = fmaf(w1, s1, conv);
             conv                       = fmaf(w2, s2, conv);
             conv                       = fmaf(w3, p, conv);
-            const __nv_bfloat16 output = __float2bfloat16_rn(silu(conv));
+            const __nv_bfloat16 output = ninfer_float_to_bf16(silu(conv));
             if (row < query_rows) {
                 query[column * query_rows + row] = output;
             } else if (row < query_rows + key_rows) {

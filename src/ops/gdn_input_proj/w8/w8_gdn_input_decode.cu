@@ -1,4 +1,5 @@
 #include "ops/gdn_input_proj/w8/w8_gdn_input_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/gdn_input_proj/gdn_conv.cuh"
@@ -20,7 +21,7 @@ struct W8GdnDecodeConvEpilogue {
             const float projected[1]{accumulator};
             conv.store(row, projected);
         } else {
-            z[row - 8192] = __float2bfloat16_rn(accumulator);
+            z[row - 8192] = ninfer_float_to_bf16(accumulator);
         }
     }
 };

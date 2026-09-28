@@ -7,6 +7,7 @@
 // only what both share: layout constants, device helpers, and the split reducer.
 
 #include "core/device.h" // kTargetSmCount
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/math.cuh"
 #include "ops/common/mma.cuh"
 #include "ops/common/warp.cuh"
@@ -231,7 +232,7 @@ __launch_bounds__(256) __global__ void causal_attention_small_t_reduce_output_ke
         if (absolute_column >= valid_columns[batch]) {
             if (tid < DChunk && d_start + tid < kCausalHeadDim)
                 out[causal_q_index<Geometry>(q_head, d_start + tid, output_column)] =
-                    __float2bfloat16(0.0f);
+                    ninfer_float_to_bf16(0.0f);
             return;
         }
     }
@@ -266,7 +267,7 @@ __launch_bounds__(256) __global__ void causal_attention_small_t_reduce_output_ke
     }
 
     const float value = (head_l > 0.0f) ? numerator / head_l : 0.0f;
-    out[causal_q_index<Geometry>(q_head, d, output_column)] = __float2bfloat16(value);
+    out[causal_q_index<Geometry>(q_head, d, output_column)] = ninfer_float_to_bf16(value);
 }
 
 } // namespace ninfer::ops

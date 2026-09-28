@@ -28,6 +28,7 @@
 // all -- where the prefill path pays one mantissa bit for the same thing.
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/linear/ternary/ternary_rowsplit_mma.cuh"
 
 #include <cuda_bf16.h>
@@ -386,19 +387,19 @@ void ternary_small_t_mma_kernel(const __nv_bfloat16* __restrict__ x,
             const int row_hi = row0 + rb * kRowBlock + gid + 8;
             if (col0 < tokens && row_lo < rows) {
                 out[static_cast<std::int64_t>(col0) * out_row_stride + row_lo] =
-                    __float2bfloat16_rn(sum.x);
+                    ninfer_float_to_bf16(sum.x);
             }
             if (col0 < tokens && row_hi < rows) {
                 out[static_cast<std::int64_t>(col0) * out_row_stride + row_hi] =
-                    __float2bfloat16_rn(sum.z);
+                    ninfer_float_to_bf16(sum.z);
             }
             if (col0 + 1 < tokens && row_lo < rows) {
                 out[static_cast<std::int64_t>(col0 + 1) * out_row_stride + row_lo] =
-                    __float2bfloat16_rn(sum.y);
+                    ninfer_float_to_bf16(sum.y);
             }
             if (col0 + 1 < tokens && row_hi < rows) {
                 out[static_cast<std::int64_t>(col0 + 1) * out_row_stride + row_hi] =
-                    __float2bfloat16_rn(sum.w);
+                    ninfer_float_to_bf16(sum.w);
             }
         }
         } // row block

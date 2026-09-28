@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/tensor.h"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/gdn_input_proj/gdn_conv.cuh"
 
 #include <cuda_bf16.h>
@@ -33,7 +34,7 @@ struct GdnConvOutput {
 #pragma unroll
         for (int token = 0; token < Tokens; ++token) {
             z[static_cast<std::int64_t>(token) * kGdnZRows + parent_row - kGdnChannels] =
-                __float2bfloat16_rn(projected[token]);
+                ninfer_float_to_bf16(projected[token]);
         }
     }
 

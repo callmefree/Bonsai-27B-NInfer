@@ -282,7 +282,7 @@ __launch_bounds__(256) __global__
         const float wv           = __bfloat162float(weight[i]);
         float zv                 = 0.0f;
         if constexpr (Epilogue == RmsEpilogue::Gated) { zv = __bfloat162float(z[index]); }
-        out[index] = __float2bfloat16_rn(rmsnorm_epilogue<Epilogue>(xv, inv, wv, zv));
+        out[index] = ninfer_float_to_bf16(rmsnorm_epilogue<Epilogue>(xv, inv, wv, zv));
     }
 }
 

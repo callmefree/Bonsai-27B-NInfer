@@ -7,6 +7,7 @@
 // FP4 or FP8.
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/kv_cache/nvfp4_group16_codec.cuh"
 #include "ops/kv_cache/hadamard_d256.cuh"
 #include "ops/softmax_attention/dense/causal_cache/small_t.cuh"
@@ -626,7 +627,7 @@ __launch_bounds__(256) __global__ void causal_attention_small_t_nvfp4_reduce_out
         const int absolute_column = token + (Offset ? column_begin : 0);
         if (absolute_column >= valid_columns[batch]) {
             if (tid < kCausalHeadDim)
-                out[causal_q_index<Geometry>(q_head, tid, output_column)] = __float2bfloat16(0.0f);
+                out[causal_q_index<Geometry>(q_head, tid, output_column)] = ninfer_float_to_bf16(0.0f);
             return;
         }
     }
@@ -663,7 +664,7 @@ __launch_bounds__(256) __global__ void causal_attention_small_t_nvfp4_reduce_out
 #pragma unroll
     for (int r = 0; r < 8; ++r) {
         const int d                                             = tid + 32 * r;
-        out[causal_q_index<Geometry>(q_head, d, output_column)] = __float2bfloat16(values[r]);
+        out[causal_q_index<Geometry>(q_head, d, output_column)] = ninfer_float_to_bf16(values[r]);
     }
 }
 

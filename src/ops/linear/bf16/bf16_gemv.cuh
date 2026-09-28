@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/linear/bf16/bf16_config.h"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/math.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/common/warp.cuh"
@@ -97,7 +98,7 @@ struct Bf16StoreEpilogue {
     template <class Output>
     __device__ __forceinline__ void operator()(const Output& output, std::int32_t parent_row,
                                                float accumulator) const {
-        output.store(parent_row, __float2bfloat16_rn(accumulator));
+        output.store(parent_row, ninfer_float_to_bf16(accumulator));
     }
 };
 

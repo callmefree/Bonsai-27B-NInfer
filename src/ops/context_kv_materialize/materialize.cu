@@ -292,7 +292,7 @@ __global__ __launch_bounds__(Rows / 16 * ColumnWarps * 32, 1) void context_kv_mm
                 const auto dst     = row % 128 + 128LL * ((positions[column] & 2047) +
                                                       (long long)layer.padded_capacity *
                                                           (row / 128 + 8 * slots[request]));
-                layer.cache_v[dst] = __float2half_rn(__bfloat162float(__float2bfloat16_rn(result)));
+                layer.cache_v[dst] = __float2half_rn(__bfloat162float(ninfer_float_to_bf16(result)));
             }
         }
     }
@@ -336,7 +336,7 @@ struct MaterializeProjectionEpilogue {
             const auto dst     = row % 128 + 128LL * ((positions[column] & 2047) +
                                                   (long long)layer.padded_capacity *
                                                       (row / 128 + 8 * slots[request]));
-            layer.cache_v[dst] = __float2half_rn(__bfloat162float(__float2bfloat16_rn(result)));
+            layer.cache_v[dst] = __float2half_rn(__bfloat162float(ninfer_float_to_bf16(result)));
         }
     }
 

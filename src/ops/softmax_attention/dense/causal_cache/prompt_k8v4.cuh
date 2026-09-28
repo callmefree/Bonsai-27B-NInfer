@@ -5,6 +5,7 @@
 // FP16 for FP16/FP32 PV MMA, and the normalized result receives the FP32 inverse rotation.
 
 #include "ops/kv_cache/fp8_e4m3_row_codec.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/kv_cache/hadamard_d256.cuh"
 #include "ops/kv_cache/nvfp4_group16_codec.cuh"
 #include "ops/softmax_attention/dense/causal_cache/prompt_common.cuh"
@@ -450,7 +451,7 @@ __global__ __maxnreg__(120) void causal_attention_prompt_k8v4_kernel(
 #pragma unroll
         for (int r = 0; r < 8; ++r) {
             const int d                                               = lane + 32 * r;
-            out[causal_prompt_q_index<Geometry>(q_head, d, q0 + row)] = __float2bfloat16(values[r]);
+            out[causal_prompt_q_index<Geometry>(q_head, d, q0 + row)] = ninfer_float_to_bf16(values[r]);
         }
     }
     __syncthreads();

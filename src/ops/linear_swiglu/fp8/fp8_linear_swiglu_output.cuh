@@ -49,7 +49,7 @@ struct Fp8SwiGluOutput {
 
     __device__ __forceinline__ void store_pair(std::int32_t row, std::int32_t token, float gate,
                                                float up) const {
-        data[static_cast<std::int64_t>(token) * rows + row] = __float2bfloat16_rn(silu(gate) * up);
+        data[static_cast<std::int64_t>(token) * rows + row] = ninfer_float_to_bf16(silu(gate) * up);
     }
 };
 

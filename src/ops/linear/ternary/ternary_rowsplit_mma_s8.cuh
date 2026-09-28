@@ -35,6 +35,7 @@
 // the E4 criterion (6.44 <= PPL <= 6.50 and >= 19/20 on the 20-question suite).
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/linear/ternary/ternary_rowsplit_storage.cuh"
 #include "ops/linear/ternary/ternary_s8_scratch.h"
@@ -624,21 +625,21 @@ void ternary_pq2_mma_s8_kernel(const std::int8_t* __restrict__ act_codes,
             if (row_lo < rows) {
                 if (token_a < tokens) {
                     out[static_cast<std::int64_t>(token_a) * out_row_stride + row_lo] =
-                        __float2bfloat16_rn(acc[sub][0] * a_left);
+                        ninfer_float_to_bf16(acc[sub][0] * a_left);
                 }
                 if (token_b < tokens) {
                     out[static_cast<std::int64_t>(token_b) * out_row_stride + row_lo] =
-                        __float2bfloat16_rn(acc[sub][1] * a_right);
+                        ninfer_float_to_bf16(acc[sub][1] * a_right);
                 }
             }
             if (row_hi < rows) {
                 if (token_a < tokens) {
                     out[static_cast<std::int64_t>(token_a) * out_row_stride + row_hi] =
-                        __float2bfloat16_rn(acc[sub][2] * a_left);
+                        ninfer_float_to_bf16(acc[sub][2] * a_left);
                 }
                 if (token_b < tokens) {
                     out[static_cast<std::int64_t>(token_b) * out_row_stride + row_hi] =
-                        __float2bfloat16_rn(acc[sub][3] * a_right);
+                        ninfer_float_to_bf16(acc[sub][3] * a_right);
                 }
             }
         }

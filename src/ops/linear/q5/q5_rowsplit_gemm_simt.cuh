@@ -37,6 +37,7 @@
 // padded region [k, padded_k) are never used.
 
 #include "core/pdl.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/common/math.cuh"
 #include "ops/common/memory.cuh"
 #include "ops/common/warp.cuh"
@@ -251,7 +252,7 @@ __launch_bounds__(64, 16) __global__
         const std::int64_t index = static_cast<std::int64_t>(lane) * n + row;
         float sum                = s_part[0][lane] + s_part[1][lane];
         if constexpr (AddResidual) { sum += __bfloat162float(out[index]); }
-        out[index] = __float2bfloat16(sum);
+        out[index] = ninfer_float_to_bf16(sum);
     }
 }
 
@@ -265,14 +266,14 @@ struct Q5Split4StoreEpilogue {
             if constexpr (SplitOutput) {
                 if (row < SplitRow) {
                     out[static_cast<std::int64_t>(token) * out_ld + row] =
-                        __float2bfloat16(values[token]);
+                        ninfer_float_to_bf16(values[token]);
                 } else {
                     out_tail[static_cast<std::int64_t>(token) * (n - SplitRow) + row - SplitRow] =
-                        __float2bfloat16(values[token]);
+                        ninfer_float_to_bf16(values[token]);
                 }
             } else {
                 out[static_cast<std::int64_t>(token) * out_ld + row] =
-                    __float2bfloat16(values[token]);
+                    ninfer_float_to_bf16(values[token]);
             }
         }
     }
@@ -381,13 +382,13 @@ __launch_bounds__(128, 10) __global__ void q5_rowsplit_gemm_simt_split4_kernel(
             for (int p = 0; p < 4; ++p) { sum += s_part[p][lane]; }
             if constexpr (SplitOutput) {
                 if (row < SplitRow) {
-                    out[static_cast<std::int64_t>(lane) * out_ld + row] = __float2bfloat16(sum);
+                    out[static_cast<std::int64_t>(lane) * out_ld + row] = ninfer_float_to_bf16(sum);
                 } else {
                     out_tail[static_cast<std::int64_t>(lane) * (n - SplitRow) + row - SplitRow] =
-                        __float2bfloat16(sum);
+                        ninfer_float_to_bf16(sum);
                 }
             } else {
-                out[static_cast<std::int64_t>(lane) * out_ld + row] = __float2bfloat16(sum);
+                out[static_cast<std::int64_t>(lane) * out_ld + row] = ninfer_float_to_bf16(sum);
             }
         }
     } else {
@@ -506,13 +507,13 @@ __global__ void q5_rowsplit_gemm_simt_kernel(const __nv_bfloat16* __restrict__ x
         if (lane == 0) {
             if constexpr (SplitOutput) {
                 if (row < SplitRow) {
-                    out[static_cast<std::int64_t>(col0 + tt) * out_ld + row] = __float2bfloat16(a);
+                    out[static_cast<std::int64_t>(col0 + tt) * out_ld + row] = ninfer_float_to_bf16(a);
                 } else {
                     out_tail[static_cast<std::int64_t>(col0 + tt) * (n - SplitRow) + row -
-                             SplitRow] = __float2bfloat16(a);
+                             SplitRow] = ninfer_float_to_bf16(a);
                 }
             } else {
-                out[static_cast<std::int64_t>(col0 + tt) * out_ld + row] = __float2bfloat16(a);
+                out[static_cast<std::int64_t>(col0 + tt) * out_ld + row] = ninfer_float_to_bf16(a);
             }
         }
     }

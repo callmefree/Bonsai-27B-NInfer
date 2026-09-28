@@ -1,4 +1,5 @@
 #include "ops/linear_swiglu/q4/q4_linear_swiglu_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "ops/common/math.cuh"
 #include "ops/common/memory.cuh"
@@ -57,11 +58,11 @@ struct Q4SwiGluSmallTEpilogue {
     __device__ __forceinline__ void store(int row, int col0, float4 projected) const {
         if (col0 < columns) {
             out[static_cast<std::int64_t>(col0) * kIntermediate + row] =
-                __float2bfloat16_rn(silu(projected.x) * projected.z);
+                ninfer_float_to_bf16(silu(projected.x) * projected.z);
         }
         if (col0 + 1 < columns) {
             out[static_cast<std::int64_t>(col0 + 1) * kIntermediate + row] =
-                __float2bfloat16_rn(silu(projected.y) * projected.w);
+                ninfer_float_to_bf16(silu(projected.y) * projected.w);
         }
     }
 };
@@ -198,7 +199,7 @@ __global__ void q4_linear_swiglu_gemv_pair_kernel(const __nv_bfloat16* __restric
 
     gate_acc = warp_reduce_sum(gate_acc);
     up_acc   = warp_reduce_sum(up_acc);
-    if (lane == 0) { out[out_row] = __float2bfloat16(silu(gate_acc) * up_acc); }
+    if (lane == 0) { out[out_row] = ninfer_float_to_bf16(silu(gate_acc) * up_acc); }
 }
 
 } // namespace

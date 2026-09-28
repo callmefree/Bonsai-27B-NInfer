@@ -608,21 +608,21 @@ void ternary_wide_t_kernel(const __nv_bfloat16* __restrict__ x,
             if (row_lo < rows) {
                 if (token_a < tokens) {
                     out[static_cast<std::int64_t>(token_a) * out_row_stride + row_lo] =
-                        __float2bfloat16_rn(acc[sub][0]);
+                        ninfer_float_to_bf16(acc[sub][0]);
                 }
                 if (token_b < tokens) {
                     out[static_cast<std::int64_t>(token_b) * out_row_stride + row_lo] =
-                        __float2bfloat16_rn(acc[sub][1]);
+                        ninfer_float_to_bf16(acc[sub][1]);
                 }
             }
             if (row_hi < rows) {
                 if (token_a < tokens) {
                     out[static_cast<std::int64_t>(token_a) * out_row_stride + row_hi] =
-                        __float2bfloat16_rn(acc[sub][2]);
+                        ninfer_float_to_bf16(acc[sub][2]);
                 }
                 if (token_b < tokens) {
                     out[static_cast<std::int64_t>(token_b) * out_row_stride + row_hi] =
-                        __float2bfloat16_rn(acc[sub][3]);
+                        ninfer_float_to_bf16(acc[sub][3]);
                 }
             }
         }

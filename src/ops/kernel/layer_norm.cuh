@@ -177,7 +177,7 @@ __global__ void layer_norm_kernel(const __nv_bfloat16* x, const __nv_bfloat16* w
     for (std::int32_t i = static_cast<std::int32_t>(threadIdx.x); i < d; i += Block) {
         const float value = (__bfloat162float(x[base + i]) - mean) * inv;
         out[base + i] =
-            __float2bfloat16_rn(value * __bfloat162float(weight[i]) + __bfloat162float(bias[i]));
+            ninfer_float_to_bf16(value * __bfloat162float(weight[i]) + __bfloat162float(bias[i]));
     }
 }
 

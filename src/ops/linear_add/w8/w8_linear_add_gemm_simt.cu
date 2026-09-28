@@ -1,4 +1,5 @@
 #include "ops/linear_add/w8/w8_linear_add_kernels.h"
+#include "ops/common/bf16_compat.cuh"
 
 #include "core/device.h"
 #include "ops/common/math.h"
@@ -67,7 +68,7 @@ __global__ __launch_bounds__(RowsPerCta * 32, 2) void w8_linear_add_decode_kerne
     }
 
     acc = warp_reduce_sum(acc);
-    if (lane == 0) { residual[row] = __float2bfloat16_rn(__bfloat162float(residual[row]) + acc); }
+    if (lane == 0) { residual[row] = ninfer_float_to_bf16(__bfloat162float(residual[row]) + acc); }
 }
 
 template <int RowsPerCta>

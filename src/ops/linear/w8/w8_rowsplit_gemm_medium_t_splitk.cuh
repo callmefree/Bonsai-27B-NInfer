@@ -5,6 +5,7 @@
 // physical direct-write policy.
 
 #include "ops/linear/w8/w8_small_t_mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
@@ -214,7 +215,7 @@ __launch_bounds__(KSplits* NGroups * 32, MinBlocks) void w8_rowsplit_medium_t_sp
         const auto store               = [&](int row, int col, float value) {
             __nv_bfloat16* destination = output_tile.at(row, col);
             if constexpr (AddResidual) { value += __bfloat162float(*destination); }
-            *destination = __float2bfloat16_rn(value);
+            *destination = ninfer_float_to_bf16(value);
         };
 #pragma unroll
         for (int ni = 0; ni < kNt; ++ni) {

@@ -15,6 +15,7 @@
 // statically compiled boundary variant outside the kernel.
 
 #include "ops/common/mma.cuh"
+#include "ops/common/bf16_compat.cuh"
 #include "ops/linear/q6/q6_rowsplit_storage.cuh"
 
 #include <cuda_bf16.h>
@@ -439,32 +440,32 @@ void q6_rowsplit_gemm_mma_kernel(
             const float* values   = accum[mi][ni];
             if constexpr (kFull) {
                 out[static_cast<std::int64_t>(output_col0) * rows + output_row0] =
-                    __float2bfloat16_rn(values[0]);
+                    ninfer_float_to_bf16(values[0]);
                 out[static_cast<std::int64_t>(output_col1) * rows + output_row0] =
-                    __float2bfloat16_rn(values[1]);
+                    ninfer_float_to_bf16(values[1]);
                 out[static_cast<std::int64_t>(output_col0) * rows + output_row1] =
-                    __float2bfloat16_rn(values[2]);
+                    ninfer_float_to_bf16(values[2]);
                 out[static_cast<std::int64_t>(output_col1) * rows + output_row1] =
-                    __float2bfloat16_rn(values[3]);
+                    ninfer_float_to_bf16(values[3]);
             } else {
                 if (output_row0 < rows) {
                     if (output_col0 < cols) {
                         out[static_cast<std::int64_t>(output_col0) * rows + output_row0] =
-                            __float2bfloat16_rn(values[0]);
+                            ninfer_float_to_bf16(values[0]);
                     }
                     if (output_col1 < cols) {
                         out[static_cast<std::int64_t>(output_col1) * rows + output_row0] =
-                            __float2bfloat16_rn(values[1]);
+                            ninfer_float_to_bf16(values[1]);
                     }
                 }
                 if (output_row1 < rows) {
                     if (output_col0 < cols) {
                         out[static_cast<std::int64_t>(output_col0) * rows + output_row1] =
-                            __float2bfloat16_rn(values[2]);
+                            ninfer_float_to_bf16(values[2]);
                     }
                     if (output_col1 < cols) {
                         out[static_cast<std::int64_t>(output_col1) * rows + output_row1] =
-                            __float2bfloat16_rn(values[3]);
+                            ninfer_float_to_bf16(values[3]);
                     }
                 }
             }
