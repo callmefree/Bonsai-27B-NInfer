@@ -38,6 +38,16 @@ __device__ __forceinline__ void mma_f16(float& c0, float& c1, float& c2, float& 
                                         unsigned a1, unsigned a2, unsigned a3, unsigned b0,
                                         unsigned b1);
 
+// k8 f16 MMA with f32 accumulation. Turing supports only the m16n8k8 shape of
+// the m16n8 family (m16n8k16 - even the f16 flavor - requires sm_80).
+__device__ __forceinline__ void mma_f16_k8(float& c0, float& c1, float& c2, float& c3,
+                                           unsigned a0, unsigned a1, unsigned b0) {
+    asm volatile("mma.sync.aligned.m16n8k8.row.col.f32.f16.f16.f32 "
+                 "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%0,%1,%2,%3};\n"
+                 : "+f"(c0), "+f"(c1), "+f"(c2), "+f"(c3)
+                 : "r"(a0), "r"(a1), "r"(b0));
+}
+
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
 // Turing (sm_75) has no bf16 tensor core. Convert the bf16 operands to fp16 and
 // dispatch to the fp16 MMA, keeping f32 accumulation. Signature-compatible with
@@ -74,10 +84,17 @@ __device__ __forceinline__ void mma_bf16(float& c0, float& c1, float& c2, float&
 __device__ __forceinline__ void mma_f16(float& c0, float& c1, float& c2, float& c3, unsigned a0,
                                         unsigned a1, unsigned a2, unsigned a3, unsigned b0,
                                         unsigned b1) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    // sm_75 has no m16n8k16 shape (even f16): split k16 into two k8 MMAs.
+    // Fragment halves align: (a0,a1,b0) cover k0-7, (a2,a3,b1) cover k8-15.
+    mma_f16_k8(c0, c1, c2, c3, a0, a1, b0);
+    mma_f16_k8(c0, c1, c2, c3, a2, a3, b1);
+#else
     asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 "
                  "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};\n"
                  : "+f"(c0), "+f"(c1), "+f"(c2), "+f"(c3)
                  : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(b0), "r"(b1));
+#endif
 }
 
 // FP16-accumulate variant: full-rate on consumer parts where f32-acc HMMA runs at
@@ -85,18 +102,43 @@ __device__ __forceinline__ void mma_f16(float& c0, float& c1, float& c2, float& 
 // c1 = rows 8-15 column pair of the same fragment the f32 variant returns in c0..c3.
 __device__ __forceinline__ void mma_f16_f16acc(unsigned& c0, unsigned& c1, unsigned a0, unsigned a1,
                                                unsigned a2, unsigned a3, unsigned b0, unsigned b1) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    // sm_75: no k16 shape; split into two k8 MMAs with fp16 accumulation.
+    asm volatile("mma.sync.aligned.m16n8k8.row.col.f16.f16.f16.f16 "
+                 "{%0,%1}, {%2,%3}, {%4}, {%0,%1};\n"
+                 : "+r"(c0), "+r"(c1)
+                 : "r"(a0), "r"(a1), "r"(b0));
+    asm volatile("mma.sync.aligned.m16n8k8.row.col.f16.f16.f16.f16 "
+                 "{%0,%1}, {%2,%3}, {%4}, {%0,%1};\n"
+                 : "+r"(c0), "+r"(c1)
+                 : "r"(a2), "r"(a3), "r"(b1));
+#else
     asm volatile("mma.sync.aligned.m16n8k16.row.col.f16.f16.f16.f16 "
                  "{%0,%1}, {%2,%3,%4,%5}, {%6,%7}, {%0,%1};\n"
                  : "+r"(c0), "+r"(c1)
                  : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(b0), "r"(b1));
+#endif
 }
 
 __device__ __forceinline__ void mma_s8(int& c0, int& c1, int& c2, int& c3, unsigned a0, unsigned a1,
                                        unsigned a2, unsigned a3, unsigned b0, unsigned b1) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    // sm_75 has the s8 m16n8k16 shape but not k32: split k32 into two k16 MMAs.
+    // (a0,a1,b0) cover k0-15, (a2,a3,b1) cover k16-31; accumulate both.
+    asm volatile("mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
+                 "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%0,%1,%2,%3};\n"
+                 : "+r"(c0), "+r"(c1), "+r"(c2), "+r"(c3)
+                 : "r"(a0), "r"(a1), "r"(b0));
+    asm volatile("mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 "
+                 "{%0,%1,%2,%3}, {%4,%5}, {%6}, {%0,%1,%2,%3};\n"
+                 : "+r"(c0), "+r"(c1), "+r"(c2), "+r"(c3)
+                 : "r"(a2), "r"(a3), "r"(b1));
+#else
     asm volatile("mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32 "
                  "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};\n"
                  : "+r"(c0), "+r"(c1), "+r"(c2), "+r"(c3)
                  : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(b0), "r"(b1));
+#endif
 }
 
 __device__ __forceinline__ void mma_fp8_e4m3(float& c0, float& c1, float& c2, float& c3,
