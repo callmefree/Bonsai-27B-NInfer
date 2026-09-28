@@ -60,14 +60,17 @@ jobs:
       - name: Diagnose remaining bf16 cvt emitters (kept PTX + .loc map)
         if: failure()
         run: |
-          for f in $(find ptx_keep -name '*.ptx' 2>/dev/null); do
-            if grep -q 'cvt\.bf16x2\.f32' "$f"; then
+          # NOTE: in PTX the instruction is cvt.rn.bf16x2.f32 (rounding modifier
+          # present); only the ptxas *error message* abbreviates it to
+          # cvt.bf16x2.f32. The pattern must tolerate the modifier.
+          for f in $(find "$GITHUB_WORKSPACE/ptx_keep" -name '*.ptx' 2>/dev/null); do
+            if grep -qE 'cvt\.[a-z0-9.]*bf16x2\.f32' "$f"; then
               echo "########## $f ##########"
               echo "--- .file map ---"
               grep -n '^[[:space:]]*\.file' "$f" | head -30
               echo "--- cvt sites with nearest source .loc ---"
               awk '/^[[:space:]]*\.loc/ { loc=$0 }
-                   /cvt\.bf16x2\.f32/ { n++; print "cvt #" n ": " $0; print "   " loc }
+                   /cvt\.[a-z0-9.]*bf16x2\.f32/ { n++; print "cvt #" n ": " $0; print "   " loc }
                    n>=12 { exit }' "$f"
             fi
           done
