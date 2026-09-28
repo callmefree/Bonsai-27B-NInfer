@@ -1,13 +1,14 @@
-name: sm75 compile check (Turing / Tesla T10)
+name: sm75 compile + package (Turing / Tesla T10)
 
-# Verifies the sm_75 (Turing) port of the ternary GEMM kernels compiles cleanly
-# with CUDA 13.1 and that the generated SASS contains NO cp.async instructions
-# (cp.async is Ampere+, so sm_75 must use the synchronous fallback in memory.cuh).
+# Builds the FULL NInfer server (ninfer-serve) and CLI (ninfer) for sm_75 (Turing,
+# Tesla T10) with CUDA 13.1, verifies the generated SASS contains NO cp.async
+# instructions (cp.async is Ampere+, so sm_75 must use the synchronous fallback in
+# memory.cuh), and uploads the statically-linked server binary as a downloadable
+# artifact so it can be deployed on the real Tesla T10 without recompiling there.
 #
 # NOTE: GitHub-hosted runners have no GPU. That is fine — nvcc cross-compiles to
-# sm_75 and emits SASS without a physical card. Only *runtime* inference validation
-# still needs the real Tesla T10 (and its cooling). This workflow covers the
-# *compile-time* validation previously planned for the fn36 box.
+# sm_75 and the server only links against CUDA runtime libs (present in the devel
+# image). Only *runtime* inference validation still needs the real Tesla T10.
 
 on:
   push:
@@ -17,7 +18,7 @@ on:
 jobs:
   build-sm75:
     runs-on: ubuntu-24.04
-    # CUDA 13.1 devel image ships nvcc + cuobjdump; no GPU required for compiling.
+    # CUDA 13.1 devel image ships nvcc + cuobjdump + libcudart; no GPU required.
     container:
       image: nvidia/cuda:13.1.0-devel-ubuntu24.04
 
@@ -32,7 +33,8 @@ jobs:
           apt-get install -y --no-install-recommends \
             git cmake ninja-build pkg-config \
             gcc-13 g++-13 \
-            libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
+            libavformat-dev libavcodec-dev libavutil-dev libswscale-dev \
+            libssl-dev zlib1g-dev
           # Sanity: confirm toolchain versions
           nvcc --version | head -3
           cmake --version | head -1
@@ -41,7 +43,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure (sm_75 only)
+      - name: Configure (sm_75, apps ON)
         run: |
           # --keep-dir must exist BEFORE cmake runs: nvcc writes kept intermediates
           # even during the compiler-identification try-compile, and fails if the
@@ -50,12 +52,15 @@ jobs:
           cmake -G Ninja -B build \
             -DCMAKE_CUDA_ARCHITECTURES=75 \
             -DCMAKE_BUILD_TYPE=Release \
-            -DNINFER_BUILD_APPS=OFF \
+            -DNINFER_BUILD_APPS=ON \
             -DBUILD_TESTING=OFF \
             -DCMAKE_CUDA_FLAGS="-lineinfo --keep --keep-dir=$GITHUB_WORKSPACE/ptx_keep"
 
       - name: Build ninfer_ops (sm_75)
         run: cmake --build build --target ninfer_ops -j 2
+
+      - name: Build ninfer-serve + ninfer (sm_75, full server)
+        run: cmake --build build --target ninfer-serve ninfer -j 2
 
       - name: Diagnose remaining bf16 cvt emitters (kept PTX + .loc map)
         if: failure()
@@ -91,3 +96,21 @@ jobs:
             exit 1
           fi
           echo "PASS: ninfer_ops sm_75 SASS contains no cp.async"
+
+      - name: Sanity: linkage check (no GPU needed)
+        run: |
+          echo "--- ninfer-serve ---"
+          build/apps/ninfer-serve --version 2>&1 | head -3 || echo "(--version unsupported, continuing)"
+          echo "--- ninfer ---"
+          build/apps/ninfer --version 2>&1 | head -3 || true
+          file build/apps/ninfer-serve build/apps/ninfer
+          ldd build/apps/ninfer-serve | grep -iE 'cudart|cuda|not found' || true
+
+      - name: Upload ninfer-serve + ninfer binaries (sm_75)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ninfer-sm75-server
+          path: |
+            build/apps/ninfer-serve
+            build/apps/ninfer
+          if-no-files-found: error
