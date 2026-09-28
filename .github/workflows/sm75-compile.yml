@@ -1,0 +1,70 @@
+name: sm75 compile check (Turing / Tesla T10)
+
+# Verifies the sm_75 (Turing) port of the ternary GEMM kernels compiles cleanly
+# with CUDA 13.1 and that the generated SASS contains NO cp.async instructions
+# (cp.async is Ampere+, so sm_75 must use the synchronous fallback in memory.cuh).
+#
+# NOTE: GitHub-hosted runners have no GPU. That is fine — nvcc cross-compiles to
+# sm_75 and emits SASS without a physical card. Only *runtime* inference validation
+# still needs the real Tesla T10 (and its cooling). This workflow covers the
+# *compile-time* validation previously planned for the fn36 box.
+
+on:
+  push:
+    branches: [sm75-port]
+  workflow_dispatch:
+
+jobs:
+  build-sm75:
+    runs-on: ubuntu-24.04
+    # CUDA 13.1 devel image ships nvcc + cuobjdump; no GPU required for compiling.
+    container:
+      image: nvidia/cuda:13.1.0-devel-ubuntu24.04
+
+    env:
+      CC: gcc-13
+      CXX: g++-13
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git cmake ninja-build pkg-config \
+            gcc-13 g++-13 \
+            libavformat-dev libavcodec-dev libavutil-dev libswscale-dev
+          # Sanity: confirm toolchain versions
+          nvcc --version | head -3
+          cmake --version | head -1
+          gcc-13 --version | head -1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (sm_75 only)
+        run: |
+          cmake -G Ninja -B build \
+            -DCMAKE_CUDA_ARCHITECTURES=75 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DNINFER_BUILD_APPS=OFF \
+            -DBUILD_TESTING=OFF
+
+      - name: Build ninfer_ops (sm_75)
+        run: cmake --build build --target ninfer_ops -j 2
+
+      - name: Verify no cp.async in sm_75 SASS
+        run: |
+          set -e
+          OBJDIR=build/src/CMakeFiles/ninfer_ops.dir
+          found=0
+          for o in $(find "$OBJDIR" -name '*.o'); do
+            arch=$(cuobjdump "$o" 2>/dev/null | grep -oE 'arch = sm_[0-9a-z]+' | head -1 || true)
+            cnt=$(cuobjdump -sass "$o" 2>/dev/null | grep -icE 'CPASYNC|cp\.async' || true)
+            echo "$o :: ${arch:-no-device-code} :: cp.async_hits=$cnt"
+            if [ "${cnt:-0}" -gt 0 ]; then found=1; fi
+          done
+          if [ "$found" -ne 0 ]; then
+            echo "FAIL: cp.async SASS present in sm_75 build (Turing has no cp.async)"
+            exit 1
+          fi
+          echo "PASS: ninfer_ops sm_75 SASS contains no cp.async"
