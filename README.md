@@ -122,6 +122,8 @@
 
 改动收敛在 4 个咽喉文件：`mma.cuh`（MMA 形状拆分 + bf16→fp16 位级转换）、`memory.cuh`（cp.async 同步回退 + reduce shfl 回退）、`bf16_compat.cuh`（新建，f32→bf16 RNE shim，511 处调用）、`math.cuh`（pack_bf16x2 sm_80+ 守卫）。完整过程记录见 [`PORT_sm75_TURING.md`](PORT_sm75_TURING.md)。
 
+**待机降功耗**：参考 [VLLM-SM75](https://github.com/fishensw/VLLM-SM75) 的两级方案（P-State 常驻钳位 P8 ≈ 10–15 W/卡 + 引擎自动休眠），机制解析与可借鉴路线见 [`T10_IDLE_POWER.md`](T10_IDLE_POWER.md)。
+
 ---
 
 **说明**：本仓库是 Bowsai-2-27B 三元部署的复现工程；上游作者工作看上游，这里列的是"我们怎么跑起来的每一步，要去看什么资料/命令"。
