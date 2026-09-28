@@ -146,4 +146,22 @@ __device__ __forceinline__ void pipe_wait() {
 #endif
 }
 
+// ---------------------------------------------------------------------------
+// sm_75 lacks the Ampere+ __reduce_*_sync warp intrinsics. Emulate
+// __reduce_max_sync with a shfl_xor warp reduction so the sampler (and any
+// other sm_75-compiled kernel) keeps building on Turing.
+// ---------------------------------------------------------------------------
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+__device__ __forceinline__ unsigned int __reduce_max_sync_fallback(unsigned int mask,
+                                                                  unsigned int val) {
+    #pragma unroll
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        const unsigned int other = __shfl_xor_sync(mask, val, offset);
+        val = (val > other) ? val : other;
+    }
+    return val;
+}
+#define __reduce_max_sync(mask, val) __reduce_max_sync_fallback((mask), (val))
+#endif // sm_75 __reduce_max_sync fallback
+
 } // namespace ninfer::ops
