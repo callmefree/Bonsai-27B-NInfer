@@ -2,6 +2,7 @@
 
 #include "ops/common/math.h"
 #include "ops/common/memory.cuh"
+#include "ops/common/bf16_compat.cuh"
 
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
@@ -23,11 +24,19 @@ __device__ __forceinline__ float exp2_approx(float x) {
 }
 
 __device__ __forceinline__ std::uint32_t pack_bf16x2(float lo, float hi) {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 800
     std::uint32_t out;
     const std::uint32_t lo_bits = __float_as_uint(lo);
     const std::uint32_t hi_bits = __float_as_uint(hi);
     asm volatile("cvt.rn.bf16x2.f32 %0, %1, %2;\n" : "=r"(out) : "r"(hi_bits), "r"(lo_bits));
     return out;
+#else
+    // Turing (sm_75) has no bf16 instructions at all: build the packed bf16x2
+    // bit pattern manually via RNE rounding (see bf16_compat.cuh).
+    const std::uint32_t lo_b = ninfer_bf16_rne_bits(lo);
+    const std::uint32_t hi_b = ninfer_bf16_rne_bits(hi);
+    return (hi_b << 16) | lo_b;
+#endif
 }
 
 __device__ __forceinline__ std::uint32_t pack_f16x2(float lo, float hi) {
