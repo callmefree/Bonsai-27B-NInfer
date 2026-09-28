@@ -32,9 +32,40 @@ __device__ __forceinline__ unsigned smem_addr(const void* ptr) {
     return static_cast<unsigned>(__cvta_generic_to_shared(ptr));
 }
 
+// ---------------------------------------------------------------------------
+// Turing (sm_75) compatibility fallback
+// sm_75 has no cp.async / pipeline async copy (those are Ampere+). Provide a
+// synchronous, register-mediated global->shared copy so the existing kernels
+// (written for Ampere+) keep compiling and running on Turing. The fallback is
+// byte-wise (correct, but no async overlap) — throughput is lower, which is
+// acceptable for the sm_75 port. sm_89 / sm_120 keep the fast cp.async path.
+// ---------------------------------------------------------------------------
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+template <int Bytes>
+__device__ __forceinline__ void cp_async_fallback(void* smem_dst, const void* gmem_src) {
+    static_assert(Bytes >= 1 && Bytes <= 16, "cp_async_fallback supports 1..16 bytes");
+    const unsigned char* src = reinterpret_cast<const unsigned char*>(gmem_src);
+    unsigned char* dst = reinterpret_cast<unsigned char*>(smem_dst);
+    #pragma unroll
+    for (int i = 0; i < Bytes; ++i) dst[i] = src[i];
+}
+template <int Bytes>
+__device__ __forceinline__ void cp_async_zfill_fallback(void* smem_dst, const void* gmem_src,
+                                                       int src_bytes) {
+    static_assert(Bytes >= 1 && Bytes <= 16, "cp_async_zfill_fallback supports 1..16 bytes");
+    const unsigned char* src = reinterpret_cast<const unsigned char*>(gmem_src);
+    unsigned char* dst = reinterpret_cast<unsigned char*>(smem_dst);
+    #pragma unroll
+    for (int i = 0; i < Bytes; ++i) dst[i] = (i < src_bytes) ? src[i] : 0;
+}
+#endif // sm_75 fallback helpers
+
 template <int Bytes, Cache Policy = Cache::ca>
 __device__ __forceinline__ void cp_async(void* smem_dst, const void* gmem_src) {
     static_assert(Bytes == 4 || Bytes == 8 || Bytes == 16, "cp_async supports 4, 8, or 16 bytes");
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    cp_async_fallback<Bytes>(smem_dst, gmem_src);
+#else
     if constexpr (Policy == Cache::cg) {
         static_assert(Bytes == 16, "cp.async.cg requires a 16-byte copy");
         asm volatile("cp.async.cg.shared.global [%0], [%1], 16;\n"
@@ -45,6 +76,7 @@ __device__ __forceinline__ void cp_async(void* smem_dst, const void* gmem_src) {
                      :
                      : "r"(smem_addr(smem_dst)), "l"(gmem_src), "n"(Bytes));
     }
+#endif
 }
 
 template <int Bytes, Cache Policy = Cache::ca>
@@ -52,6 +84,9 @@ __device__ __forceinline__ void cp_async_zfill(void* smem_dst, const void* gmem_
                                                int src_bytes) {
     static_assert(Bytes == 4 || Bytes == 8 || Bytes == 16,
                   "cp_async_zfill supports 4, 8, or 16 bytes");
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    cp_async_zfill_fallback<Bytes>(smem_dst, gmem_src, src_bytes);
+#else
     if constexpr (Policy == Cache::cg) {
         static_assert(Bytes == 16, "cp.async.cg requires a 16-byte copy");
         asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;\n"
@@ -62,28 +97,53 @@ __device__ __forceinline__ void cp_async_zfill(void* smem_dst, const void* gmem_
                      :
                      : "r"(smem_addr(smem_dst)), "l"(gmem_src), "n"(Bytes), "r"(src_bytes));
     }
+#endif
 }
 
-__device__ __forceinline__ void cp_commit() { asm volatile("cp.async.commit_group;\n"); }
+__device__ __forceinline__ void cp_commit() {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    // synchronous copies need no commit
+#else
+    asm volatile("cp.async.commit_group;\n");
+#endif
+}
 
 template <int Groups>
 __device__ __forceinline__ void cp_wait() {
     static_assert(Groups >= 0 && Groups <= 7, "cp_wait group count must fit the PTX immediate");
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    __syncthreads();
+#else
     asm volatile("cp.async.wait_group %0;\n" : : "n"(Groups));
+#endif
 }
 
 template <int Bytes>
 __device__ __forceinline__ void pipe_copy(void* smem_dst, const void* gmem_src) {
     static_assert(Bytes == 4 || Bytes == 8 || Bytes == 16, "pipe_copy supports 4, 8, or 16 bytes");
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    cp_async_fallback<Bytes>(smem_dst, gmem_src);
+#else
     __pipeline_memcpy_async(smem_dst, gmem_src, Bytes);
+#endif
 }
 
-__device__ __forceinline__ void pipe_commit() { __pipeline_commit(); }
+__device__ __forceinline__ void pipe_commit() {
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    // no-op
+#else
+    __pipeline_commit();
+#endif
+}
 
 template <int Groups>
 __device__ __forceinline__ void pipe_wait() {
     static_assert(Groups >= 0 && Groups <= 7, "pipe_wait group count must fit the PTX immediate");
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
+    __syncthreads();
+#else
     __pipeline_wait_prior(Groups);
+#endif
 }
 
 } // namespace ninfer::ops
