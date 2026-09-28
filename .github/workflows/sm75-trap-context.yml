@@ -1,0 +1,86 @@
+name: sm75 trap context (targeted)
+
+# The full build (sm75-compile.yml) reports how many sm_75 kernels carry TRAP/BREAK,
+# but a count cannot say whether the trap is *reachable*. Most of them come from
+# mma.cuh, where an arch guard turns an unsupported MMA into __trap(); that is dead
+# code as long as nothing dispatches int8/fp8 on Turing.
+#
+# A few reported kernels do NOT include mma.cuh at all (sampling, speculative_round),
+# which means the trap is compiler-generated and the count alone cannot clear it.
+# This workflow compiles ONLY those objects and prints the SASS around each trap so
+# the guard branch -- or the absence of one -- is visible.
+#
+# Runtime cost is a few minutes: configure + three object files, no full build.
+
+on:
+  push:
+    branches: [sm75-port]
+  workflow_dispatch:
+
+jobs:
+  trap-context:
+    runs-on: ubuntu-24.04
+    container:
+      image: nvidia/cuda:13.1.0-devel-ubuntu24.04
+
+    env:
+      CC: gcc-13
+      CXX: g++-13
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git cmake ninja-build pkg-config \
+            gcc-13 g++-13 \
+            libavformat-dev libavcodec-dev libavutil-dev libswscale-dev \
+            libcurl4-openssl-dev \
+            libssl-dev zlib1g-dev
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (sm_75, apps ON)
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/ptx_keep"
+          cmake -G Ninja -B build \
+            -DCMAKE_CUDA_ARCHITECTURES=75 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DNINFER_BUILD_APPS=ON \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_CUDA_FLAGS="-lineinfo --keep --keep-dir=$GITHUB_WORKSPACE/ptx_keep"
+
+      - name: Build only the unclassified TRAP objects
+        run: |
+          set -e
+          OBJDIR=src/CMakeFiles/ninfer_ops.dir
+          ninja -C build \
+            "$OBJDIR/ops/launcher/sampling.cu.o" \
+            "$OBJDIR/ops/launcher/speculative_round.cu.o" \
+            "$OBJDIR/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o"
+
+      - name: Dump SASS around every TRAP/BREAK
+        run: |
+          set -e
+          OBJDIR=build/src/CMakeFiles/ninfer_ops.dir
+          for o in \
+            "$OBJDIR/ops/launcher/sampling.cu.o" \
+            "$OBJDIR/ops/launcher/speculative_round.cu.o" \
+            "$OBJDIR/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o"; do
+            echo "################ $o"
+            cuobjdump -sass "$o" > /tmp/sass.txt 2>/dev/null || true
+            # Which functions, and how many traps each.
+            awk '/Function : /{fn=$3; next} /TRAP|BREAK|BRKPT/{if (fn != "") cnt[fn]++}
+                 END {for (k in cnt) printf "%3d  %s\n", cnt[k], k}' /tmp/sass.txt | sort -rn
+            echo "--- SASS context around the first trap (12 before / 4 after) ---"
+            grep -n -m1 -E "TRAP|BREAK|BRKPT" /tmp/sass.txt | cut -d: -f1 > /tmp/ln.txt
+            if [ -s /tmp/ln.txt ]; then
+              L=$(cat /tmp/ln.txt)
+              S=$((L > 12 ? L - 12 : 1))
+              sed -n "${S},$((L + 4))p" /tmp/sass.txt
+            else
+              echo "(no TRAP/BREAK in this object)"
+            fi
+            echo
+          done
