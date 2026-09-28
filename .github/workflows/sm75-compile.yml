@@ -63,6 +63,11 @@ jobs:
       - name: Build ninfer-serve + ninfer (sm_75, full server)
         run: cmake --build build --target ninfer-serve ninfer -j 2
 
+      # Compiles the Turing MMA bridge probe. It cannot run here (no GPU on the runner), but
+      # building it keeps the probe from rotting and proves the fp16 bridge compiles.
+      - name: Build sm_75 MMA bridge self-test
+        run: cmake --build build --target ninfer-sm75-mma-selftest -j 2
+
       - name: Diagnose remaining bf16 cvt emitters (kept PTX + .loc map)
         if: failure()
         run: |
@@ -231,4 +236,13 @@ jobs:
           path: |
             build/apps/ninfer-serve
             build/apps/ninfer
+          if-no-files-found: error
+
+      # Run this on the T10 before the first real prefill: it is the only check that can prove
+      # the tf32->fp16 and bf16->fp16 fragment bridges are packed correctly.
+      - name: Upload sm_75 MMA bridge self-test
+        uses: actions/upload-artifact@v4
+        with:
+          name: ninfer-sm75-mma-selftest
+          path: build/apps/ninfer-sm75-mma-selftest
           if-no-files-found: error

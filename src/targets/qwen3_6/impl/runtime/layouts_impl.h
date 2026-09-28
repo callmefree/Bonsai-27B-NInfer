@@ -662,6 +662,19 @@ void validate_target_options(DeviceContext& device, const EngineOptions& options
         throw std::invalid_argument(
             "kv-dtype rk4v4/rk4v4-e8 requires compute capability 8.9 (RTX 4090 build)");
     }
+    // Turing (sm_75) keeps the sm_89 kernel family enabled (NINFER_SM89 selects the i8/rk4v4
+    // kernels and the 48 KiB-capped w8 schedules, not the architecture), so the i8 and fp8
+    // attention kernels are compiled in and dispatched purely on the KV storage at run time.
+    // Both bottom out in an MMA Turing does not have -- mma_s8() and mma_fp8_e4m3() are
+    // __trap() on sm_75 -- so an --kv-dtype other than bf16 kills the first prefill. Reject
+    // them at start-up instead: bf16 is the only KV layout that is both correct and (with
+    // 16 GB) the only one that fits anyway.
+    if (device.compute_capability() == 75 && options.kv_cache != KvCacheStorage::BFloat16) {
+        throw std::invalid_argument(
+            "kv-dtype: only bf16 is supported on compute capability 7.5 (Tesla T10); "
+            "int8/fp8/nvfp4/k8v4/rk4v4/rk4v4-e8 dispatch to i8/fp8 MMA kernels that trap on "
+            "Turing");
+    }
     if (options.max_context == 0 || options.max_context > Variant::maximum_context) {
         throw std::invalid_argument("max_context exceeds the variant native context capacity");
     }

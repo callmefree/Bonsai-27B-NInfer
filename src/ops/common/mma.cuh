@@ -171,11 +171,37 @@ __device__ __forceinline__ void mma_tf32_bits(float& c0, float& c1, float& c2, f
                  : "r"(a0), "r"(a1), "r"(a2), "r"(a3), "r"(b0), "r"(b1));
 }
 #else
+// tf32 MMA requires sm_80+. Unlike mma_s8 / mma_fp8_e4m3, this one is NOT dead code on
+// Turing: the GDN chunked prefill kernels reach it on every prefill (chunked/state_passing.cuh
+// x2, output.cuh x1, prepare_wy_wu.cuh x3 -- see PORT_sm75_TURING.md risk P0-B), so trapping
+// here means "prefill dies on the first chunk". Bridge it to the fp16 MMA instead, exactly the
+// way mma_bf16() above does.
+//
+// The operands are bf16 values the callers widened to fp32, so rounding them back into fp16
+// keeps every mantissa bit they carry (bf16 8 -> fp16 10); tf32 would have kept 10 as well.
+// Fragment translation (m16n8k8 tf32 -> m16n8k8 fp16), using the callers' own A layout
+//   a0 = (row, k)  a1 = (row+8, k)  a2 = (row, k+4)  a3 = (row+8, k+4)
+//   b0 = (k, col)  b1 = (k+4, col)
+// against the fp16 layout (one register per row, two k per register):
+//   regA0 = {a0, a2}   regA1 = {a1, a3}   regB = {b0, b1}
+// Slot i of A is multiplied by slot i of B, so the k index the hardware assigns to a slot is
+// irrelevant -- only the A/B pairing has to hold, and it does.
+// Range caveat: fp16 tops out at 65504 and flushes under 6e-5, where tf32 keeps bf16's range.
+// The operands here are post-RMSNorm q/k/v/w/u, orders of magnitude inside that window.
+// Validated bit-exactly against an fp32 CUDA-core reference by apps/sm75_mma_selftest.cu --
+// run it on the target GPU (gate 0) before trusting prefill PPL.
 __device__ __forceinline__ void mma_tf32_bits(float& c0, float& c1, float& c2, float& c3,
                                               unsigned a0, unsigned a1, unsigned a2, unsigned a3,
                                               unsigned b0, unsigned b1) {
-    // tf32 MMA requires sm_80+; never dispatched on Turing. Trap loudly.
-    __trap();
+    const __half2 ha0 = __halves2half2(__float2half_rn(__uint_as_float(a0)),
+                                       __float2half_rn(__uint_as_float(a2)));
+    const __half2 ha1 = __halves2half2(__float2half_rn(__uint_as_float(a1)),
+                                       __float2half_rn(__uint_as_float(a3)));
+    const __half2 hb  = __halves2half2(__float2half_rn(__uint_as_float(b0)),
+                                       __float2half_rn(__uint_as_float(b1)));
+    mma_f16_k8(c0, c1, c2, c3, *reinterpret_cast<const unsigned*>(&ha0),
+               *reinterpret_cast<const unsigned*>(&ha1),
+               *reinterpret_cast<const unsigned*>(&hb));
 }
 #endif
 

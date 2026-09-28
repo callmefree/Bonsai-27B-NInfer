@@ -22,8 +22,17 @@ namespace ninfer::ops::detail {
 // Read once, because the choice decides which kernel enters the captured CUDA graph.
 [[nodiscard]] inline bool ternary_s8_enabled() {
     static const bool enabled = [] {
+#if defined(NINFER_SM75)
+        // Turing has no m16n8k32 s8 MMA: mma_s8() expands to __trap() there (see mma.cuh), and
+        // this rung is the default prefill path for T >= 33 tokens -- i.e. every real prefill.
+        // Hard-off on sm_75: the env var cannot re-enable it, because the only thing it can
+        // produce is a device-side trap. Cost: prefill runs the bf16 wide rung instead, which
+        // the author measured at 1.20-1.30x slower than s8. Correctness beats 25% here.
+        return false;
+#else
         const char* value = std::getenv("NINFER_TERNARY_S8");
         return value == nullptr || std::string(value) != "0";
+#endif
     }();
     return enabled;
 }
