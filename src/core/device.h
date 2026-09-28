@@ -21,12 +21,23 @@ int device_sm_count();
 // launch policies cannot query the runtime, and the host launcher that must reproduce such a
 // policy exactly has to agree with it at compile time; those two sites use this constant, every
 // other site uses device_sm_count().
-#if defined(NINFER_SM89)
+// NOTE: NINFER_SM89 is a *kernel-family* switch in this tree (the i8 / rk4v4 kernels ported from
+// sergiuszm/ninfer-4090 plus the 48 KiB-capped w8 schedules), not an architecture switch: Turing
+// shares the 48 KiB static shared-memory wall with sm_86/sm_89, so the sm_75 build deliberately
+// keeps NINFER_SM89=1. What is *not* valid for sm_75 is the SM count below, because 128 is the
+// RTX 4090 / 5080 figure. NINFER_SM75 overrides only that, keeping every kernel path intact.
+#if defined(NINFER_SM75)
+#if defined(NINFER_SM75_SM_COUNT)
+inline constexpr int kTargetSmCount = NINFER_SM75_SM_COUNT;
+#else
+inline constexpr int kTargetSmCount = 56; // NVIDIA Tesla T10 (TU102-890, 56 SM)
+#endif
+#elif defined(NINFER_SM89)
 inline constexpr int kTargetSmCount = 128; // NVIDIA GeForce RTX 4090
 #elif defined(NINFER_SM86)
 inline constexpr int kTargetSmCount = 82; // NVIDIA GeForce RTX 3090
 #else
-#error "NInfer requires NINFER_SM86 or NINFER_SM89"
+#error "NInfer requires NINFER_SM75, NINFER_SM86 or NINFER_SM89"
 #endif
 
 // Non-owning execution facts passed to Ops whose launch policy depends on physical device

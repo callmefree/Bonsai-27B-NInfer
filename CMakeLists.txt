@@ -39,6 +39,19 @@ if(CMAKE_CUDA_ARCHITECTURES MATCHES "89|120a|75")
   add_compile_definitions(NINFER_SM89=1)
 endif()
 
+# Tesla T10 / sm_75: the SM count above is wrong, the kernel paths above are not.
+# NINFER_SM89 selects the i8/rk4v4 kernel family and the 48 KiB-capped w8 schedules; Turing has
+# the same 48 KiB static shared-memory wall as sm_86/sm_89, so that switch must stay ON for sm_75.
+# kTargetSmCount (src/core/device.h) is separately the compile-time mirror of device_sm_count()
+# and is only used to clamp split counts so a grid is one resident wave -- 128 is the 4090/5080
+# figure while TU102-890 has 56 SM, which would overshoot a wave by 2.3x on the narrow
+# `int8 family && tokens>=6 && window 5000..8198` branch. NINFER_SM75 overrides just that value.
+if(CMAKE_CUDA_ARCHITECTURES MATCHES "75")
+  set(NINFER_SM75_SM_COUNT "56" CACHE STRING
+      "Streaming-multiprocessor count of the target sm_75 device (Tesla T10 / TU102-890 = 56)")
+  add_compile_definitions(NINFER_SM75=1 NINFER_SM75_SM_COUNT=${NINFER_SM75_SM_COUNT})
+endif()
+
 if(MSVC)
   add_compile_definitions(NOMINMAX UTF8PROC_STATIC)
   add_compile_options(

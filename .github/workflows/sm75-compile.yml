@@ -136,15 +136,46 @@ jobs:
             echo "--- ternary kernels present? ---"
             grep -oiE '_Z[A-Za-z0-9_]*ternary[A-Za-z0-9_]*' /tmp/res.txt | sort -u | wc -l
             echo
-            echo "===== 3. macro exposure (KNOWN ISSUE, informational) ====="
-            echo -n "objects compiled with NINFER_SM89: "
+            echo "===== 3. compile-time SM count (kTargetSmCount) ====="
+            echo -n "objects with NINFER_SM89 (kernel-family switch, kept ON for sm_75): "
             grep -c 'NINFER_SM89' build/compile_commands.json 2>/dev/null || echo 0
-            echo "NOTE: CMakeLists.txt:38 matches '89|120a|75', so the sm_75 build also"
-            echo "      gets NINFER_SM89=1 -> sm_89 kernel paths + kTargetSmCount=128"
-            echo "      (Tesla T10 has 56 SM). Instruction-level guards still hold"
-            echo "      (see step 2), but scheduling choices may be wrong."
+            echo -n "objects with NINFER_SM75 (SM-count override): "
+            grep -c 'NINFER_SM75' build/compile_commands.json 2>/dev/null || echo 0
+            echo -n "declared value: "
+            grep -oE 'NINFER_SM75_SM_COUNT=[0-9]+' build/compile_commands.json 2>/dev/null \
+              | sort -u | tr '\n' ' ' ; echo
+            echo "NOTE: NINFER_SM89 is a kernel-family switch (i8/rk4v4 kernels + the 48 KiB"
+            echo "      capped w8 schedules) and must stay ON for sm_75 -- Turing shares that"
+            echo "      wall. NINFER_SM75 overrides only kTargetSmCount so a split grid is one"
+            echo "      resident wave: 56 (TU102-890), not 128 (RTX 4090/5080)."
           } 2>&1 | tee "$REPORT"
           echo "report written: $(wc -l < "$REPORT") lines"
+
+      - name: "Verify sm_75 target SM count is 56 (not the 4090's 128)"
+        run: |
+          set -e
+          CC=build/compile_commands.json
+          if [ ! -f "$CC" ]; then echo "FAIL: $CC missing"; exit 1; fi
+          hits=$(grep -c 'NINFER_SM75=1' "$CC" || true)
+          echo "compile units with NINFER_SM75=1: $hits"
+          if [ "${hits:-0}" -eq 0 ]; then
+            echo "FAIL: sm_75 build has no NINFER_SM75=1 -> kTargetSmCount fell back to 128"
+            exit 1
+          fi
+          val=$(grep -oE 'NINFER_SM75_SM_COUNT=[0-9]+' "$CC" | sort -u | head -1 | cut -d= -f2)
+          echo "NINFER_SM75_SM_COUNT = ${val:-<unset>}"
+          if [ "${val:-56}" != "56" ]; then
+            echo "FAIL: expected 56 SM for Tesla T10, got $val"
+            exit 1
+          fi
+          # The override must not have switched OFF the 4090 i8 kernel family.
+          sm89=$(grep -c 'NINFER_SM89=1' "$CC" || true)
+          echo "compile units keeping NINFER_SM89=1 (i8 kernel family): $sm89"
+          if [ "${sm89:-0}" -eq 0 ]; then
+            echo "FAIL: NINFER_SM89=1 lost -- the i8/rk4v4 kernel family got switched off"
+            exit 1
+          fi
+          echo "PASS: kTargetSmCount=56 while the sm_89 kernel family stays enabled"
 
       - name: Upload static health report
         uses: actions/upload-artifact@v4
