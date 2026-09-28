@@ -47,10 +47,26 @@ jobs:
             -DCMAKE_CUDA_ARCHITECTURES=75 \
             -DCMAKE_BUILD_TYPE=Release \
             -DNINFER_BUILD_APPS=OFF \
-            -DBUILD_TESTING=OFF
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_CUDA_FLAGS="-lineinfo --keep --keep-dir=$GITHUB_WORKSPACE/ptx_keep"
 
       - name: Build ninfer_ops (sm_75)
         run: cmake --build build --target ninfer_ops -j 2
+
+      - name: Diagnose remaining bf16 cvt emitters (kept PTX + .loc map)
+        if: failure()
+        run: |
+          for f in $(find ptx_keep -name '*.ptx' 2>/dev/null); do
+            if grep -q 'cvt\.bf16x2\.f32' "$f"; then
+              echo "########## $f ##########"
+              echo "--- .file map ---"
+              grep -n '^[[:space:]]*\.file' "$f" | head -30
+              echo "--- cvt sites with nearest source .loc ---"
+              awk '/^[[:space:]]*\.loc/ { loc=$0 }
+                   /cvt\.bf16x2\.f32/ { n++; print "cvt #" n ": " $0; print "   " loc }
+                   n>=12 { exit }' "$f"
+            fi
+          done
 
       - name: Verify no cp.async in sm_75 SASS
         run: |
