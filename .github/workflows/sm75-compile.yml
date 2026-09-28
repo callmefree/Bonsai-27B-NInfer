@@ -225,9 +225,11 @@ jobs:
       - name: "Sanity: linkage check (no GPU needed)"
         run: |
           echo "--- binaries exist ---"
-          ls -la build/apps/ninfer-serve build/apps/ninfer
+          ls -la build/apps/ninfer-serve build/apps/ninfer build/apps/ninfer-perplexity
           echo "--- dynamic deps ---"
           (ldd build/apps/ninfer-serve || true) | grep -iE 'cudart|cuda|not found' || true
+          echo "--- ninfer-perplexity runs and prints its usage ---"
+          build/apps/ninfer-perplexity --help
 
       - name: Upload ninfer-serve + ninfer + perplexity binaries (sm_75)
         uses: actions/upload-artifact@v4
