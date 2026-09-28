@@ -97,7 +97,7 @@ jobs:
           fi
           echo "PASS: ninfer_ops sm_75 SASS contains no cp.async"
 
-      - name: Sanity: linkage check (no GPU needed)
+      - name: "Sanity: linkage check (no GPU needed)"
         run: |
           echo "--- ninfer-serve ---"
           build/apps/ninfer-serve --version 2>&1 | head -3 || echo "(--version unsupported, continuing)"
