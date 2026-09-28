@@ -42,22 +42,23 @@ __device__ __forceinline__ void mma_f16(float& c0, float& c1, float& c2, float& 
 // Turing (sm_75) has no bf16 tensor core. Convert the bf16 operands to fp16 and
 // dispatch to the fp16 MMA, keeping f32 accumulation. Signature-compatible with
 // the Ampere bf16 path, so every mma_bf16() call site works unchanged on sm_75.
+// NOTE: the cuda_bf16.h bf16<->fp16 conversion intrinsics are themselves guarded
+// to __CUDA_ARCH__ >= 800 in the CUDA headers, so convert manually: bf16 is the
+// top 16 bits of an f32, widen by shift, then round into fp16 with the fp16
+// intrinsics that exist on every arch >= sm_53.
+__device__ __forceinline__ unsigned bf16x2_to_fp16x2(unsigned v) {
+    const float lo = __uint_as_float((v & 0xFFFFu) << 16);
+    const float hi = __uint_as_float((v >> 16) << 16);
+    const __half2 h = __halves2half2(__float2half_rn(lo), __float2half_rn(hi));
+    return *reinterpret_cast<const unsigned*>(&h);
+}
+
 __device__ __forceinline__ void mma_bf16(float& c0, float& c1, float& c2, float& c3, unsigned a0,
                                          unsigned a1, unsigned a2, unsigned a3, unsigned b0,
                                          unsigned b1) {
-    const __half2 ha0 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&a0));
-    const __half2 ha1 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&a1));
-    const __half2 ha2 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&a2));
-    const __half2 ha3 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&a3));
-    const __half2 hb0 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&b0));
-    const __half2 hb1 = __bfloat1622half2(*reinterpret_cast<const __nv_bfloat162*>(&b1));
-    const unsigned pa0 = *reinterpret_cast<const unsigned*>(&ha0);
-    const unsigned pa1 = *reinterpret_cast<const unsigned*>(&ha1);
-    const unsigned pa2 = *reinterpret_cast<const unsigned*>(&ha2);
-    const unsigned pa3 = *reinterpret_cast<const unsigned*>(&ha3);
-    const unsigned pb0 = *reinterpret_cast<const unsigned*>(&hb0);
-    const unsigned pb1 = *reinterpret_cast<const unsigned*>(&hb1);
-    mma_f16(c0, c1, c2, c3, pa0, pa1, pa2, pa3, pb0, pb1);
+    mma_f16(c0, c1, c2, c3, bf16x2_to_fp16x2(a0), bf16x2_to_fp16x2(a1),
+            bf16x2_to_fp16x2(a2), bf16x2_to_fp16x2(a3), bf16x2_to_fp16x2(b0),
+            bf16x2_to_fp16x2(b1));
 }
 #else
 __device__ __forceinline__ void mma_bf16(float& c0, float& c1, float& c2, float& c3, unsigned a0,
