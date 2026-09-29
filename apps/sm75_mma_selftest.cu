@@ -15,7 +15,7 @@
 // sum is exact in fp32. That removes the tolerance argument entirely -- a wrong packing shows
 // up as "value is not a reference entry", not as "error 3e-2, is that OK?".
 //
-// Five checks, each scored three ways:
+// Five mma checks, each scored three ways:
 //   bad        produced values that match NO reference entry  -> the decisive one. A row/k
 //              misassignment lands on a mixed product that is not any true entry.
 //   unmatched  reference entries no thread produced           -> informational; duplicates in
@@ -23,9 +23,14 @@
 //   sum        sum of all produced values vs sum of the reference -> catches a k-pairing error
 //              that happens to keep values inside the reference set.
 //
+// Check 6 is not an mma check: it proves the PRMT byte-permute V-dequant magic in
+// causal_prompt_i8_dequant_f16x8() (the function the sm_75 int8-KV prefill kernel calls)
+// is bit-identical to the plain I2F path for all 256 signed codes x 4 scales.
+//
 // Run it on the target GPU (gate 0) before trusting prefill PPL.
 
 #include "ops/common/mma.cuh"
+#include "ops/softmax_attention/dense/causal_cache/prompt_i8.cuh"
 
 #include <cuda_runtime.h>
 #include <cstdio>
@@ -223,6 +228,33 @@ const char* check_name(int i) {
     }
 }
 
+// Check 6: the PRMT dequant magic vs the plain I2F path, bit-exact for every signed
+// code and every scale. This calls the REAL function compiled into the sm_75 int8-KV
+// prompt kernel (prompt_i8.cuh, upstream branch), not a copy of it.
+constexpr int kPrmtScales = 4;
+
+__global__ void sm75_prmt_dequant_kernel(const float* scales, int* mismatch_out) {
+    const int code = static_cast<int>(threadIdx.x) - 128;   // all 256 signed codes
+    for (int s = 0; s < kPrmtScales; ++s) {
+        const __half scale = __float2half_rn(scales[s]);
+        const __half2 s2   = __halves2half2(scale, scale);
+        alignas(8) std::int8_t codes8[8];
+#pragma unroll
+        for (int i = 0; i < 8; ++i) { codes8[i] = static_cast<std::int8_t>(code); }
+        const int4 got = causal_prompt_i8_dequant_f16x8(codes8, scale);
+        const unsigned got4[4] = {static_cast<unsigned>(got.x), static_cast<unsigned>(got.y),
+                                  static_cast<unsigned>(got.z), static_cast<unsigned>(got.w)};
+#pragma unroll
+        for (int i = 0; i < 4; ++i) {
+            const __half2 ref2 = __hmul2(
+                __floats2half2_rn(static_cast<float>(code), static_cast<float>(code)), s2);
+            if (got4[i] != *reinterpret_cast<const unsigned*>(&ref2)) {
+                atomicAdd(mismatch_out, 1);
+            }
+        }
+    }
+}
+
 } // namespace
 
 int main() {
@@ -285,6 +317,45 @@ int main() {
         }
     }
     std::printf("\n");
+
+    // Check 6: PRMT dequant magic vs I2F, all 256 codes x 4 scales, bit-exact.
+    float* dq_scales    = nullptr;
+    int*   dq_mismatch  = nullptr;
+    if (cudaMalloc(&dq_scales, sizeof(float) * kPrmtScales) != cudaSuccess ||
+        cudaMalloc(&dq_mismatch, sizeof(int)) != cudaSuccess) {
+        std::printf("sm75_mma_selftest: cudaMalloc (dequant check) failed\n");
+        cudaFree(err);
+        cudaFree(bad);
+        cudaFree(unmatched);
+        cudaFree(sum_c);
+        cudaFree(sum_ref);
+        return 2;
+    }
+    const float h_dq_scales[kPrmtScales] = {1.0f, 0.125f, -0.875f, 7.5f};
+    cudaMemcpy(dq_scales, h_dq_scales, sizeof(h_dq_scales), cudaMemcpyHostToDevice);
+    cudaMemset(dq_mismatch, 0, sizeof(int));
+    sm75_prmt_dequant_kernel<<<1, 256>>>(dq_scales, dq_mismatch);
+    const cudaError_t dq_launch = cudaGetLastError();
+    int h_dq = -1;
+    if (dq_launch != cudaSuccess || cudaDeviceSynchronize() != cudaSuccess ||
+        cudaMemcpy(&h_dq, dq_mismatch, sizeof(int), cudaMemcpyDeviceToHost) != cudaSuccess) {
+        std::printf("sm75_mma_selftest: dequant check kernel failed: %s\n",
+                    cudaGetErrorString(dq_launch));
+        cudaFree(dq_scales);
+        cudaFree(dq_mismatch);
+        cudaFree(err);
+        cudaFree(bad);
+        cudaFree(unmatched);
+        cudaFree(sum_c);
+        cudaFree(sum_ref);
+        return 2;
+    }
+    const bool dq_ok = (h_dq == 0);
+    if (!dq_ok) { ++failures; }
+    std::printf("%-58s %s  mismatches=%d (256 codes x 4 scales)\n",
+                "prmt_dequant()   PRMT magic vs I2F, bit-exact", dq_ok ? "PASS" : "FAIL", h_dq);
+    std::printf("\n");
+
     if (failures == 0) {
         std::printf("RESULT: all bridges bit-exact. The sm_75 tf32 and s8 bridges are safe to\n"
                     "        trust, and the ternary int8 prefill rung can stay enabled.\n");
@@ -296,7 +367,11 @@ int main() {
                     "          fix the probe before drawing conclusions about mma.cuh.\n"
                     "        - mma_s8 fails but the fp32/bf16 checks pass -> the 4x m8n8k16\n"
                     "          fragment split is wrong. Set NINFER_TERNARY_S8=0 so prefill falls\n"
-                    "          back to the bf16 rung, and fix the row/k split in mma.cuh.\n",
+                    "          back to the bf16 rung, and fix the row/k split in mma.cuh.\n"
+                    "        - prmt_dequant fails -> the byte-permute V-dequant diverged from\n"
+                    "          I2F; the int8-KV prefill would produce wrong V values. Flip the\n"
+                    "          >=750 block in causal_prompt_i8_dequant_f16x8 back to I2F and\n"
+                    "          investigate before re-enabling the magic path.\n",
                     failures);
     }
 
@@ -305,5 +380,7 @@ int main() {
     cudaFree(unmatched);
     cudaFree(sum_c);
     cudaFree(sum_ref);
+    cudaFree(dq_scales);
+    cudaFree(dq_mismatch);
     return failures == 0 ? 0 : 1;
 }

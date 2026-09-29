@@ -82,11 +82,14 @@ __device__ __forceinline__ int4 causal_prompt_i8_dequant_f16x8(const std::int8_t
     const int2 raw   = load_vec<int2>(codes8);
     const __half2 s2 = __halves2half2(scale, scale);
     unsigned packed[4];
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 890
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 750
     // Ada throttles on the conversion pipe, so build the halves with byte permutes
     // instead: bias each code to unsigned, splice it under exponent 2^10 (0x64xx is
     // 1024 + code), and subtract 1024 + 128. Integer halves are exact, so the result
-    // is bit-identical to the I2F path.
+    // is bit-identical to the I2F path. Turing's I2F pipe is quarter-rate -- even
+    // slower than Ada's -- so the magic path pays off there too (self-test check 6
+    // proves bit-exactness for all 256 codes x 4 scales on sm_75). PRMT exists on
+    // every arch this project targets, hence >= 750 rather than == 890.
     const __half2 magic2 = __halves2half2(__ushort_as_half(0x6480), __ushort_as_half(0x6480));
     const unsigned x0    = static_cast<unsigned>(raw.x) ^ 0x80808080u;
     const unsigned x1    = static_cast<unsigned>(raw.y) ^ 0x80808080u;
@@ -117,6 +120,8 @@ __device__ __forceinline__ int4 causal_prompt_i8_dequant_f16x8(const std::int8_t
 // 120 registers is the spill-free point on SM120. Ada codegen spills the producer
 // score/accumulator state at 120, so give it the full file: 512 threads x 128 = 64K
 // registers, and occupancy is capped at one CTA by shared memory either way.
+// Keep this Ada-only: Turing's register file is the same 64K/SM and the kernel is
+// spill-free at 120 there as well -- widening costs occupancy for nothing.
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 890
 #define NINFER_CAUSAL_PROMPT_I8_MAXNREG 128
 #else
@@ -143,6 +148,8 @@ __global__ __maxnreg__(NINFER_CAUSAL_PROMPT_I8_MAXNREG) void causal_attention_pr
 // Ada runs one CTA per SM; four producer warps (one per scheduler) cannot hide mma
 // latency and leave twelve workers stalled at the phase barrier. Split each 16-row
 // score tile across a warp pair (column halves of Bc) there. SM120 keeps 4/12.
+// sm_75 keeps ColSplit=1 as well: the split is unprofiled off Ada and re-times the
+// named-barrier schedule -- do not widen it without measuring.
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 890
     constexpr int ColSplit = 2;
 #else
@@ -713,9 +720,27 @@ static_assert(kCausalPromptI8SmemBytes == 92672);
 __device__ __forceinline__ int4 causal_prompt_i8_dequant_f16x8(const std::int8_t* codes8,
                                                                __half scale) {
     const int2 raw       = load_vec<int2>(codes8);
-    const std::int8_t* c = reinterpret_cast<const std::int8_t*>(&raw);
     const __half2 s2     = __halves2half2(scale, scale);
     unsigned packed[4];
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 750
+    // Same PRMT magic the sm_89 fork uses: bias each signed byte to unsigned (^0x80),
+    // splice it under the 2^10 exponent (0x64xx = 1024 + byte), and subtract 1024+128
+    // -> the exact signed code as an fp16 half, no I2F involved. Bit-exact against the
+    // I2F path for all 256 codes x 4 scales (self-test check 6). Turing's I2F pipe is
+    // quarter-rate so this pays off most on sm_75; PRMT exists on every targeted arch.
+    const unsigned x0    = static_cast<unsigned>(raw.x) ^ 0x80808080u;
+    const unsigned x1    = static_cast<unsigned>(raw.y) ^ 0x80808080u;
+    const __half2 magic2 = __halves2half2(__ushort_as_half(0x6480), __ushort_as_half(0x6480));
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+        const unsigned src   = i < 2 ? x0 : x1;
+        const unsigned pair  = __byte_perm(src, 0x64646464u, (i & 1) ? 0x7352u : 0x7150u);
+        const __half2 code2  = __hsub2(*reinterpret_cast<const __half2*>(&pair), magic2);
+        const __half2 value2 = __hmul2(code2, s2);
+        packed[i]            = *reinterpret_cast<const unsigned*>(&value2);
+    }
+#else
+    const std::int8_t* c = reinterpret_cast<const std::int8_t*>(&raw);
 #pragma unroll
     for (int i = 0; i < 4; ++i) {
         const __half2 code2 =
@@ -723,6 +748,7 @@ __device__ __forceinline__ int4 causal_prompt_i8_dequant_f16x8(const std::int8_t
         const __half2 value2 = __hmul2(code2, s2);
         packed[i]            = *reinterpret_cast<const unsigned*>(&value2);
     }
+#endif
     return make_int4(static_cast<int>(packed[0]), static_cast<int>(packed[1]),
                      static_cast<int>(packed[2]), static_cast<int>(packed[3]));
 }
