@@ -11,14 +11,8 @@ name: sm75 trap context (targeted)
 # mnemonics separately and print the SASS window around the first real one.
 #
 # Runtime cost is a few minutes: configure + five object files, no full build.
-#
-# NOTE: deliberately NOT triggered by pushes to sm75-port -- it is a diagnostic tool, and
-# running it on every push doubles CI time for no information. Trigger it by hand
-# (workflow_dispatch) or push to the ci-probe branch.
 
 on:
-  push:
-    branches: [ci-probe]
   workflow_dispatch:
 
 jobs:
@@ -69,6 +63,7 @@ jobs:
             "$OBJDIR/ops/launcher/speculative_round.cu.o" \
             "$OBJDIR/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o" \
             "$OBJDIR/ops/softmax_attention/dense/causal_cache/small_t.cu.o" \
+            "$OBJDIR/ops/softmax_attention/dense/causal_cache/prompt.cu.o" \
             "$OBJDIR/ops/linear/ternary/ternary_rowsplit_gemm.cu.o"
 
       # Decisive control: build the SAME file for sm_89. mma.cuh's __trap() only exists
@@ -100,13 +95,19 @@ jobs:
             "$OBJDIR/ops/launcher/speculative_round.cu.o" \
             "$OBJDIR/ops/gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu.o" \
             "$OBJDIR/ops/softmax_attention/dense/causal_cache/small_t.cu.o" \
+            "$OBJDIR/ops/softmax_attention/dense/causal_cache/prompt.cu.o" \
             "$OBJDIR/ops/linear/ternary/ternary_rowsplit_gemm.cu.o"; do
             echo "################ $o"
             cuobjdump -sass "$o" > /tmp/sass.txt 2>/dev/null || true
             echo "--- mnemonic census ---"
-            echo -n "  BPT.TRAP : "; grep -c "BPT.TRAP" /tmp/sass.txt || true
-            echo -n "  BREAK    : "; grep -cE "(^|[^.])BREAK" /tmp/sass.txt || true
-            echo -n "  BRKPT    : "; grep -c "BRKPT" /tmp/sass.txt || true
+            echo -n "  BPT.TRAP  : "; grep -c "BPT.TRAP" /tmp/sass.txt || true
+            echo -n "  BREAK     : "; grep -cE "(^|[^.])BREAK" /tmp/sass.txt || true
+            echo -n "  BRKPT     : "; grep -c "BRKPT" /tmp/sass.txt || true
+            echo -n "  IMMA.8816 : "; grep -c "IMMA\.8816" /tmp/sass.txt || true
+            echo -n "  HMMA.1688 : "; grep -c "HMMA\.1688" /tmp/sass.txt || true
+            echo -n "  HMMA.16816: "; grep -c "HMMA\.16816" /tmp/sass.txt || true
+            echo -n "  IDP       : "; grep -cE "(^|[^.])IDP" /tmp/sass.txt || true
+            echo -n "  IMAD      : "; grep -cE "(^|[^.])IMAD" /tmp/sass.txt || true
             echo "--- functions carrying BPT.TRAP (count, name) ---"
             awk '/Function : /{fn=$3; next} /BPT\.TRAP/{if (fn != "") cnt[fn]++}
                  END {for (k in cnt) printf "%4d  %s\n", cnt[k], k}' /tmp/sass.txt \
@@ -135,3 +136,27 @@ jobs:
             fi
             echo
           done
+
+      # The bridge claim, checked instead of asserted in prose: every object whose mma_s8
+      # call sites were bridged must (a) contain real IMMA.8816 tensor-core instructions
+      # and (b) carry zero BPT.TRAP. The gdn object is exempt -- its traps were traced to
+      # an upstream device-assert shape present on sm_89 too (run 36472109444).
+      - name: Assert the s8 bridge landed in SASS (IMMA.8816 > 0, BPT.TRAP = 0)
+        run: |
+          set -e
+          OBJDIR=build/src/CMakeFiles/ninfer_ops.dir
+          fail=0
+          for o in \
+            "$OBJDIR/ops/softmax_attention/dense/causal_cache/small_t.cu.o" \
+            "$OBJDIR/ops/softmax_attention/dense/causal_cache/prompt.cu.o" \
+            "$OBJDIR/ops/linear/ternary/ternary_rowsplit_gemm.cu.o"; do
+            cuobjdump -sass "$o" > /tmp/s.txt 2>/dev/null || true
+            I=$(grep -c "IMMA\.8816" /tmp/s.txt || true)
+            T=$(grep -c "BPT.TRAP"  /tmp/s.txt || true)
+            echo "$(basename $o): IMMA.8816=$I BPT.TRAP=$T"
+            if [ "$I" -lt 1 ] || [ "$T" -ne 0 ]; then
+              echo "  FAIL: expected IMMA.8816 >= 1 and BPT.TRAP == 0"
+              fail=1
+            fi
+          done
+          exit $fail
