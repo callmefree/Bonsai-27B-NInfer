@@ -663,17 +663,30 @@ void validate_target_options(DeviceContext& device, const EngineOptions& options
             "kv-dtype rk4v4/rk4v4-e8 requires compute capability 8.9 (RTX 4090 build)");
     }
     // Turing (sm_75) keeps the sm_89 kernel family enabled (NINFER_SM89 selects the i8/rk4v4
-    // kernels and the 48 KiB-capped w8 schedules, not the architecture), so the i8 and fp8
-    // attention kernels are compiled in and dispatched purely on the KV storage at run time.
-    // Both bottom out in an MMA Turing does not have -- mma_s8() and mma_fp8_e4m3() are
-    // __trap() on sm_75 -- so an --kv-dtype other than bf16 kills the first prefill. Reject
-    // them at start-up instead: bf16 is the only KV layout that is both correct and (with
-    // 16 GB) the only one that fits anyway.
-    if (device.compute_capability() == 75 && options.kv_cache != KvCacheStorage::BFloat16) {
+    // kernels and the 48 KiB-capped w8 schedules, not the architecture), so the attention
+    // kernels are compiled in and dispatched purely on the KV storage at run time.
+    //
+    // What Turing actually has, verified by ptxas on sm_75 (workflow sm75-imma-probe.yml):
+    //   m8n8k16 .s8/.u8 IMMA  ACCEPTED   (m16n8k16/k32 .s8 require sm_80)
+    //   m16n8k8  .f16  HMMA   ACCEPTED   (m16n8k16 .f16 requires sm_80)
+    //   no fp8 tensor cores of any shape
+    // mma.cuh bridges on top of that: mma_s8 -> 4x m8n8k16 (self-test check 5), and
+    // mma_bf16/mma_tf32_bits -> fp16. Therefore:
+    //   bf16 KV            : full path, no MMA dependency.
+    //   Int8Group64 KV     : QK bottom out in mma_s8() -- bridged; PV in mma_bf16() -- bridged;
+    //                        the append/quantize kernel has no MMA at all. ALLOWED.
+    //   fp8 / k8v4 KV      : mma_fp8_e4m3() has no Turing shape and no bridge (an e4m3->fp16
+    //                        bridge would also switch the accumulator to fp16 -- a numerics
+    //                        change, not a port). Still rejected.
+    //   rk4v4 / rk4v4-e8   : same mma_s8 core, but the E8 lattice rotate/pack path has never
+    //                        been exercised on Turing. Keep rejected until a probe validates it.
+    if (device.compute_capability() == 75
+        && options.kv_cache != KvCacheStorage::BFloat16
+        && options.kv_cache != KvCacheStorage::Int8Group64) {
         throw std::invalid_argument(
-            "kv-dtype: only bf16 is supported on compute capability 7.5 (Tesla T10); "
-            "int8/fp8/nvfp4/k8v4/rk4v4/rk4v4-e8 dispatch to i8/fp8 MMA kernels that trap on "
-            "Turing");
+            "kv-dtype: on compute capability 7.5 (Tesla T10) only bf16 and int8 (Int8Group64) "
+            "are supported; fp8/k8v4 have no Turing MMA, rk4v4/rk4v4-e8 are pending a Turing "
+            "probe of the E8 lattice path, nvfp4 is Blackwell-only");
     }
     if (options.max_context == 0 || options.max_context > Variant::maximum_context) {
         throw std::invalid_argument("max_context exceeds the variant native context capacity");
